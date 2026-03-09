@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TeamRadar Dashboard</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121a2b;
+        --panel-soft: #0f172a;
+        --line: #253047;
+        --text: #e6edf7;
+        --muted: #8ea1c0;
+        --brand: #4f8cff;
+      }
+      * { box-sizing: border-box; }
+      body { font-family: Inter, system-ui, sans-serif; margin: 0; background: radial-gradient(circle at 20% -10%, #17213a 0%, var(--bg) 45%); color: var(--text); }
+      .wrap { max-width: 1280px; margin: 0 auto; padding: 20px; }
+      .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+      h1 { margin: 0; font-size: 24px; letter-spacing: 0.2px; }
+      .muted { color: var(--muted); font-size: 12px; }
+
+      .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+      .tab-btn {
+        border: 1px solid var(--line);
+        background: #0c1426;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .tab-btn.active { background: linear-gradient(135deg, #1f4db7, var(--brand)); border-color: transparent; }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+
+      .grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+      .card, table, .user-block { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+      .card { padding: 14px; }
+      .card h3 { margin: 0 0 8px; font-size: 14px; color: #d2def2; }
+      ul { list-style: none; margin: 0; padding: 0; }
+      li { padding: 4px 0; font-size: 13px; }
+
+      .section-title { margin: 0 0 10px; font-size: 16px; }
+      .actions { margin: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .btn { background: #1d4ed8; color: #fff; border: 0; border-radius: 9px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+      .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+      .input { background: #0b1220; color: var(--text); border: 1px solid #334155; border-radius: 8px; padding: 6px 8px; width: 220px; }
+
+      table { width: 100%; border-collapse: collapse; overflow: hidden; }
+      th, td { border-bottom: 1px solid #1d273d; padding: 10px; text-align: left; font-size: 13px; vertical-align: top; }
+      th { color: #bfd0eb; background: #0d1528; }
+      .table-wrap { overflow: auto; }
+
+      .pill { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 11px; border: 1px solid #334155; }
+      .ok { color: #86efac; border-color: #166534; }
+      .warn { color: #fde68a; border-color: #854d0e; }
+      .danger { color: #fca5a5; border-color: #7f1d1d; }
+
+      .user-block { margin-bottom: 12px; overflow: hidden; }
+      .user-head { padding: 10px 12px; font-size: 13px; color: #cbd5e1; background: #0b1220; border-bottom: 1px solid #1f2937; }
+      .collision-wrap { display:flex; gap:16px; flex-wrap:wrap; }
+      .collision-canvas { border:1px solid var(--line); background:#0b1220; image-rendering: pixelated; cursor: crosshair; }
+      .collision-legend { font-size:12px; color: var(--muted); }
+      .collision-legend span { display:inline-block; margin-right:10px; }
+      .map-grid-2x2 { display:grid; grid-template-columns:repeat(2,minmax(140px,1fr)); gap:10px; max-width:420px; }
+      .map-slot { border:1px solid var(--line); border-radius:8px; padding:8px; background:#0b1220; }
+      .map-slot img { width:100%; height:88px; object-fit:cover; border-radius:4px; border:1px solid #1f2937; }
+      .map-slot .slot-head { font-size:12px; color:#cbd5e1; margin-bottom:6px; display:flex; justify-content:space-between; }
+
+      @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <h1>🛰️ TeamRadar Dashboard</h1>
+        <div class="muted" id="meta">로딩중...</div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="mapping">근태 매핑</button>
+        <button class="tab-btn" data-tab="attendance">근태 이벤트</button>
+        <button class="tab-btn" data-tab="work">업무 이벤트</button>
+        <button class="tab-btn" data-tab="collision">Collision Editor</button>
+      </div>
+      <section id="tab-overview" class="tab-panel active">
+        <div class="muted" style="margin:8px 2px 12px; display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="hideBotsToggle" checked />
+          <label for="hideBotsToggle">봇 사용자 숨기기</label>
+        </div>
+        <div class="grid">
+          <div class="card"><h3>근태 요약</h3><ul id="attendanceSummary"></ul></div>
+          <div class="card"><h3>업무 요약</h3><ul id="workSummary"></ul></div>
+          <div class="card"><h3>시스템</h3><ul id="systemSummary"></ul></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th>근태 매핑명</th>
+                <th>근태 상태</th>
+                <th>근태 메시지</th>
+                <th>근태 시각</th>
+                <th>업무 상태</th>
+                <th>업무요약</th>
+                <th>업데이트</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-mapping" class="tab-panel">
+        <h3 class="section-title">근태이름 → 디스코드 멤버 매핑</h3>
+        <div class="actions">
+          <button id="refreshNameBtn" class="btn">후보 재추출</button>
+          <button id="refreshTodayAttendanceBtn" class="btn">오늘 근태 다시읽기</button>
+          <button id="addMapRowBtn" class="btn">행 추가</button>
+          <button id="applyBtn" class="btn">매핑 Apply</button>
+          <span class="muted" id="applyResult"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>근태 이름</th><th>디스코드 멤버</th><th>현재 상태</th></tr>
+            </thead>
+            <tbody id="mapBody"></tbody>
+          </table>
+        </div>
+
+        <h3 class="section-title" style="margin-top:18px;">상태 → 맵 슬롯 매핑</h3>
+        <div class="actions">
+          <button id="saveStatusRoomMapBtn" class="btn">상태맵 매핑 저장</button>
+          <span class="muted" id="statusRoomMapResult"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>상태</th><th>맵 슬롯(1~4)</th></tr></thead>
+            <tbody>
+              <tr><td>근무중</td><td><select id="slotWorking" class="input"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option></select></td></tr>
+              <tr><td>퇴근중</td><td><select id="slotOffwork" class="input"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option></select></td></tr>
+              <tr><td>재택근무중</td><td><select id="slotRemote" class="input"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option></select></td></tr>
+              <tr><td>휴가중</td><td><select id="slotVacation" class="input"><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option></select></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="section-title" style="margin-top:18px;">사용자별 캐릭터 선택</h3>
+        <div class="actions">
+          <button id="applyCharacterBtn" class="btn">캐릭터 Apply</button>
+          <span class="muted" id="characterApplyResult"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>사용자</th><th>현재 캐릭터</th><th>선택</th></tr>
+            </thead>
+            <tbody id="characterBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-attendance" class="tab-panel">
+        <h3 class="section-title">최근 근태 이벤트</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>시간</th><th>이름</th><th>상태</th><th>요약</th></tr></thead>
+            <tbody id="attendanceLogsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-work" class="tab-panel">
+        <h3 class="section-title">업무공유 이벤트 (개인별)</h3>
+        <div id="workByUserWrap"></div>
+      </section>
+
+      <section id="tab-collision" class="tab-panel">
+        <h3 class="section-title">Collision Editor (mask + overrides)</h3>
+        <div class="actions">
+          <label>Map
+            <select id="collisionMapSelect" class="input" style="width:220px; margin-left:6px;"></select>
+          </label>
+          <label>Brush
+            <select id="collisionBrush" class="input" style="width:90px; margin-left:6px;">
+              <option value="1">1x1</option>
+              <option value="3">3x3</option>
+            </select>
+          </label>
+          <button id="collisionSaveBtn" class="btn">Save</button>
+          <button id="collisionRevertBtn" class="btn">Revert</button>
+          <button id="collisionResetBtn" class="btn">Reset to Mask</button>
+          <button id="collisionImportBtn" class="btn">Import JSON</button>
+          <button id="collisionExportBtn" class="btn">Export JSON</button>
+          <input type="file" id="collisionImportFile" accept="application/json" style="display:none" />
+          <span class="muted" id="collisionResult"></span>
+        </div>
+        <div class="collision-wrap">
+          <canvas id="collisionCanvas" class="collision-canvas" width="640" height="480"></canvas>
+          <div>
+            <div class="collision-legend">
+              <span>⬛ base mask block</span>
+              <span>🟥 override block</span>
+              <span>🟦 override clear</span>
+            </div>
+            <div class="muted" style="margin:8px 0 6px;">2x2 map 구성 (1 2 / 3 4)</div>
+            <div id="collisionMapGrid" class="map-grid-2x2"></div>
+            <div class="muted" id="collisionMeta" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const CHARACTER_SHEETS = Array.from(
+        { length: 20 },
+        (_, i) => 'Premade_Character_48x48_' + String(i + 1).padStart(2, '0')
+      );
+
+      const attendanceEl = document.getElementById('attendanceSummary');
+      const workEl = document.getElementById('workSummary');
+      const systemEl = document.getElementById('systemSummary');
+      const usersBody = document.getElementById('usersBody');
+      const attendanceLogsBody = document.getElementById('attendanceLogsBody');
+      const workByUserWrap = document.getElementById('workByUserWrap');
+      const metaEl = document.getElementById('meta');
+      const applyBtn = document.getElementById('applyBtn');
+      const refreshNameBtn = document.getElementById('refreshNameBtn');
+      const refreshTodayAttendanceBtn = document.getElementById('refreshTodayAttendanceBtn');
+      const addMapRowBtn = document.getElementById('addMapRowBtn');
+      const saveStatusRoomMapBtn = document.getElementById('saveStatusRoomMapBtn');
+      const statusRoomMapResult = document.getElementById('statusRoomMapResult');
+      const slotWorking = document.getElementById('slotWorking');
+      const slotOffwork = document.getElementById('slotOffwork');
+      const slotRemote = document.getElementById('slotRemote');
+      const slotVacation = document.getElementById('slotVacation');
+      const applyResult = document.getElementById('applyResult');
+      const mapBody = document.getElementById('mapBody');
+      const applyCharacterBtn = document.getElementById('applyCharacterBtn');
+      const characterApplyResult = document.getElementById('characterApplyResult');
+      const characterBody = document.getElementById('characterBody');
+      const hideBotsToggle = document.getElementById('hideBotsToggle');
+      const collisionCanvas = document.getElementById('collisionCanvas');
+      const collisionMapSelect = document.getElementById('collisionMapSelect');
+      const collisionMapGrid = document.getElementById('collisionMapGrid');
+      const collisionBrush = document.getElementById('collisionBrush');
+      const collisionSaveBtn = document.getElementById('collisionSaveBtn');
+      const collisionRevertBtn = document.getElementById('collisionRevertBtn');
+      const collisionResetBtn = document.getElementById('collisionResetBtn');
+      const collisionImportBtn = document.getElementById('collisionImportBtn');
+      const collisionExportBtn = document.getElementById('collisionExportBtn');
+      const collisionImportFile = document.getElementById('collisionImportFile');
+      const collisionResult = document.getElementById('collisionResult');
+      const collisionMeta = document.getElementById('collisionMeta');
+
+      let memberRows = [];
+      let attendanceNameRows = [];
+      let statusCache = null;
+      let collisionState = {
+        mapKey: 'base-map',
+        catalog: [],
+        layout2x2: [],
+        width: 0,
+        height: 0,
+        maskBlocked: new Set(),
+        overrides: { block: [], clear: [], meta: {} },
+      };
+
+      function li(k, v) { const node = document.createElement('li'); node.textContent = k + ': ' + v; return node; }
+      function badgeByState(state) { const s = state || '-'; const cls = /완료|출근|복귀/.test(s) ? 'ok' : /이슈|지각/.test(s) ? 'danger' : 'warn'; return '<span class="pill ' + cls + '">' + s + '</span>'; }
+      function fmt(iso) { if (!iso) return '-'; return new Date(iso).toLocaleString('ko-KR'); }
+      function esc(text) { return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); }
+      function isBotLikeUser(u = {}) {
+        if (u.isBot === true) return true;
+        const s = `${u.displayName || ''} ${u.username || ''} ${u.globalName || ''}`.toLowerCase();
+        return /bot|wantedspacebot|chroniclebot|봇/.test(s);
+      }
+
+      function memberSelectOptions(selectedUserId = '') {
+        const first = '<option value="">-- 멤버 선택 --</option>';
+        const opts = memberRows.map((m) => '<option value="' + m.userId + '" ' + (String(m.userId)===String(selectedUserId)?'selected':'') + '>' + esc(m.displayName) + ' (' + esc(m.username) + ')</option>');
+        return [first, ...opts].join('');
+      }
+      function attendanceSelectOptions(selectedName = '') {
+        const first = '<option value="">-- 근태 이름 선택 --</option>';
+        const opts = attendanceNameRows.map((name) => '<option value="' + esc(name) + '" ' + (String(name)===String(selectedName)?'selected':'') + '>' + esc(name) + '</option>');
+        return [first, ...opts].join('');
+      }
+      function characterSelectOptions(selected = '') {
+        const first = '<option value="">-- 캐릭터 선택 --</option>';
+        const opts = CHARACTER_SHEETS.map((name) => '<option value="' + name + '" ' + (String(name)===String(selected)?'selected':'') + '>' + name + '</option>');
+        return [first, ...opts].join('');
+      }
+
+      function resolveMappingStatus(attendanceName = '', userId = '') {
+        const byName = statusCache?.todayAttendanceByName || {};
+        const users = statusCache?.users || [];
+        const a = byName[String(attendanceName).trim()] || null;
+        if (a?.state) return a;
+        const u = users.find((x) => String(x.userId) === String(userId));
+        if (u?.attendance?.state) return { state: u.attendance.state, at: u.attendance.at || u.updatedAt };
+        return null;
+      }
+
+      function renderMappingRows(rows) {
+        mapBody.innerHTML = rows.map((r) => {
+          const attendance = resolveMappingStatus(r.attendanceName || '', r.userId || '');
+          const state = attendance?.state || '-';
+          const at = attendance?.at ? ' <span class="muted">(' + fmt(attendance.at) + ')</span>' : '';
+          return '<tr><td><select class="input" data-map-attendance>' + attendanceSelectOptions(r.attendanceName || '') + '</select></td><td><select class="input" data-map-user>' + memberSelectOptions(r.userId || '') + '</select></td><td>' + badgeByState(state) + at + '</td></tr>';
+        }).join('');
+      }
+
+      function renderCharacterRows(users = [], selections = {}) {
+        const sorted = [...users].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'ko'));
+        characterBody.innerHTML = sorted.map((u) => {
+          const selected = selections[u.userId] || u.characterSheet || '';
+          return '<tr><td>' + esc(u.displayName || u.userId) + ' <span class="muted">(' + u.userId + ')</span></td><td>' + esc(selected || '-') + '</td><td><select class="input" data-char-user="' + u.userId + '">' + characterSelectOptions(selected) + '</select></td></tr>';
+        }).join('');
+      }
+
+      async function loadStatusRoomMapping() {
+        try {
+          const res = await fetch('/api/map/status-room-mapping');
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'load failed');
+          const m = json.mapping || {};
+          slotWorking.value = String(m.slotByStatus?.working ?? 0);
+          slotOffwork.value = String(m.slotByStatus?.offwork ?? m.slotByStatus?.idle ?? 1);
+          slotRemote.value = String(m.slotByStatus?.remote ?? 2);
+          slotVacation.value = String(m.slotByStatus?.vacation ?? 3);
+        } catch (err) {
+          statusRoomMapResult.textContent = '상태맵 로드 실패: ' + err.message;
+        }
+      }
+
+      async function saveStatusRoomMapping() {
+        saveStatusRoomMapBtn.disabled = true;
+        statusRoomMapResult.textContent = '저장중...';
+        try {
+          const payload = {
+            slotByStatus: {
+              working: Number(slotWorking.value || 0),
+              offwork: Number(slotOffwork.value || 1),
+              remote: Number(slotRemote.value || 2),
+              vacation: Number(slotVacation.value || 3),
+            },
+          };
+          const res = await fetch('/api/map/status-room-mapping', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'save failed');
+          statusRoomMapResult.textContent = '저장 완료';
+        } catch (err) {
+          statusRoomMapResult.textContent = '저장 실패: ' + err.message;
+        } finally {
+          saveStatusRoomMapBtn.disabled = false;
+        }
+      }
+
+      async function refreshAttendanceCandidates() {
+        refreshNameBtn.disabled = true;
+        applyResult.textContent = '후보 재추출 중...';
+        try {
+          const res = await fetch('/api/attendance/names/refresh', { method: 'POST' });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'refresh failed');
+          applyResult.textContent = '후보 재추출 완료 (' + json.total + '개)';
+          await refresh();
+        } catch (err) {
+          applyResult.textContent = '후보 재추출 실패: ' + err.message;
+        } finally { refreshNameBtn.disabled = false; }
+      }
+
+      async function refreshTodayAttendance() {
+        refreshTodayAttendanceBtn.disabled = true;
+        applyResult.textContent = '오늘 근태 재수집 중...';
+        try {
+          const res = await fetch('/api/attendance/reload-today', { method: 'POST' });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'reload failed');
+          applyResult.textContent = `오늘 근태 재수집 완료 (+${json.imported || 0})`;
+          await refresh();
+        } catch (err) {
+          applyResult.textContent = '오늘 근태 재수집 실패: ' + err.message;
+        } finally {
+          refreshTodayAttendanceBtn.disabled = false;
+        }
+      }
+
+      async function applyMappings() {
+        const names = [...document.querySelectorAll('select[data-map-attendance]')];
+        const users = [...document.querySelectorAll('select[data-map-user]')];
+        const mappings = {};
+        for (let i = 0; i < names.length; i += 1) {
+          const attendanceName = names[i].value.trim();
+          const userId = users[i].value.trim();
+          if (!attendanceName || !userId) continue;
+          mappings[attendanceName] = userId;
+        }
+        applyBtn.disabled = true;
+        applyResult.textContent = '저장중...';
+        try {
+          const res = await fetch('/api/team/mappings/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mappings }) });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'apply failed');
+          applyResult.textContent = '저장 완료 (' + json.count + '개) - ' + fmt(json.updatedAt);
+          await refresh();
+        } catch (err) { applyResult.textContent = '저장 실패: ' + err.message; }
+        finally { applyBtn.disabled = false; }
+      }
+
+      async function applyCharacterMappings() {
+        const selections = {};
+        [...document.querySelectorAll('select[data-char-user]')].forEach((el) => {
+          const userId = el.getAttribute('data-char-user');
+          const sheet = el.value.trim();
+          if (userId && sheet) selections[userId] = sheet;
+        });
+        applyCharacterBtn.disabled = true;
+        characterApplyResult.textContent = '저장중...';
+        try {
+          const res = await fetch('/api/team/characters/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selections }) });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'apply failed');
+          characterApplyResult.textContent = '저장 완료 (' + json.count + '개) - ' + fmt(json.updatedAt);
+          await refresh();
+        } catch (err) {
+          characterApplyResult.textContent = '저장 실패: ' + err.message;
+        } finally {
+          applyCharacterBtn.disabled = false;
+        }
+      }
+
+      function updateMappingStatusPreview() {
+        [...document.querySelectorAll('#mapBody tr')].forEach((tr) => {
+          const attendanceName = tr.querySelector('select[data-map-attendance]')?.value || '';
+          const userId = tr.querySelector('select[data-map-user]')?.value || '';
+          const statusTd = tr.children[2];
+          if (!statusTd) return;
+          const a = resolveMappingStatus(attendanceName, userId);
+          statusTd.innerHTML = badgeByState(a?.state || '-') + (a?.at ? ' <span class="muted">(' + fmt(a.at) + ')</span>' : '');
+        });
+      }
+
+      function toPointSet(arr = []) {
+        return new Set((arr || []).map((p) => `${p.x},${p.y}`));
+      }
+
+      function mapQuery() {
+        const key = encodeURIComponent(collisionState.mapKey || 'base-map');
+        return `?mapKey=${key}`;
+      }
+
+      function renderCollisionCatalog() {
+        const maps = collisionState.catalog || [];
+        if (collisionMapSelect) {
+          collisionMapSelect.innerHTML = maps.map((m) => `<option value="${m.key}">${m.label}</option>`).join('');
+          if (collisionState.mapKey) collisionMapSelect.value = collisionState.mapKey;
+        }
+
+        if (collisionMapGrid) {
+          const slots = (collisionState.layout2x2?.length ? collisionState.layout2x2 : maps.slice(0, 4).map((m, i) => ({ slot: i + 1, key: m.key })));
+          collisionMapGrid.innerHTML = slots.slice(0, 4).map(({ slot, key }) => {
+            const m = maps.find((x) => x.key === key) || maps[slot - 1] || null;
+            if (!m) return `<div class="map-slot"><div class="slot-head"><strong>${slot}</strong><span>-</span></div></div>`;
+            const src = `/assets/custom-map/${m.baseFile}`;
+            return `<div class="map-slot"><div class="slot-head"><strong>${slot}</strong><span>${m.label}</span></div><img src="${src}" alt="${m.label}" /></div>`;
+          }).join('');
+        }
+      }
+
+      async function loadCollisionCatalog() {
+        const res = await fetch('/api/map/collision/catalog');
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'catalog fetch failed');
+        collisionState.catalog = json.maps || [];
+        collisionState.layout2x2 = json.layout2x2 || [];
+        if (!collisionState.mapKey || !collisionState.catalog.find((m) => m.key === collisionState.mapKey)) {
+          collisionState.mapKey = collisionState.catalog?.[0]?.key || 'base-map';
+        }
+        renderCollisionCatalog();
+      }
+
+      function getOverridesPayload() {
+        return {
+          version: 1,
+          block: [...(collisionState.overrides.block || [])],
+          clear: [...(collisionState.overrides.clear || [])],
+          meta: { ...(collisionState.overrides.meta || {}), updatedBy: 'dashboard' },
+        };
+      }
+
+      function drawCollisionCanvas() {
+        const ctx = collisionCanvas.getContext('2d');
+        const tile = Math.max(1, Math.floor(Math.min(960 / Math.max(1, collisionState.width), 640 / Math.max(1, collisionState.height))));
+        collisionCanvas.width = Math.max(1, collisionState.width * tile);
+        collisionCanvas.height = Math.max(1, collisionState.height * tile);
+        ctx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+
+        const blockSet = toPointSet(collisionState.overrides.block);
+        const clearSet = toPointSet(collisionState.overrides.clear);
+        const maskSet = collisionState.maskBlocked;
+
+        for (let y = 0; y < collisionState.height; y += 1) {
+          for (let x = 0; x < collisionState.width; x += 1) {
+            const key = `${x},${y}`;
+            if (maskSet.has(key)) {
+              ctx.fillStyle = '#2a2a2a';
+              ctx.fillRect(x * tile, y * tile, tile, tile);
+            }
+            if (blockSet.has(key)) {
+              ctx.fillStyle = '#ef4444';
+              ctx.fillRect(x * tile, y * tile, tile, tile);
+            }
+            if (clearSet.has(key)) {
+              ctx.fillStyle = '#3b82f6';
+              ctx.fillRect(x * tile, y * tile, tile, tile);
+            }
+          }
+        }
+
+        ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+        for (let x = 0; x <= collisionState.width; x += 1) {
+          ctx.beginPath();
+          ctx.moveTo(x * tile + 0.5, 0);
+          ctx.lineTo(x * tile + 0.5, collisionCanvas.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= collisionState.height; y += 1) {
+          ctx.beginPath();
+          ctx.moveTo(0, y * tile + 0.5);
+          ctx.lineTo(collisionCanvas.width, y * tile + 0.5);
+          ctx.stroke();
+        }
+
+        collisionMeta.textContent = `[${collisionState.mapKey}] size ${collisionState.width}x${collisionState.height} | block ${collisionState.overrides.block.length} | clear ${collisionState.overrides.clear.length}`;
+      }
+
+      function applyCollisionPaint(cx, cy, mode) {
+        const brush = Number(collisionBrush.value || 1);
+        const radius = Math.floor(brush / 2);
+        const blockSet = toPointSet(collisionState.overrides.block);
+        const clearSet = toPointSet(collisionState.overrides.clear);
+
+        for (let y = cy - radius; y <= cy + radius; y += 1) {
+          for (let x = cx - radius; x <= cx + radius; x += 1) {
+            if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) continue;
+            const key = `${x},${y}`;
+            if (mode === 'block') {
+              if (blockSet.has(key)) blockSet.delete(key); else blockSet.add(key);
+              clearSet.delete(key);
+            } else if (mode === 'clear') {
+              if (clearSet.has(key)) clearSet.delete(key); else clearSet.add(key);
+              blockSet.delete(key);
+            }
+          }
+        }
+
+        collisionState.overrides.block = [...blockSet].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+        collisionState.overrides.clear = [...clearSet].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+        drawCollisionCanvas();
+      }
+
+      async function loadCollisionEditor() {
+        try {
+          await loadCollisionCatalog();
+          const res = await fetch('/api/map/collision/effective' + mapQuery());
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'collision fetch failed');
+          collisionState.width = json.mask?.width || json.effective?.width || 0;
+          collisionState.height = json.mask?.height || json.effective?.height || 0;
+          collisionState.maskBlocked = new Set((json.mask?.blocked || []).map((p) => `${p.x},${p.y}`));
+
+          const ovRes = await fetch('/api/map/collision/overrides' + mapQuery());
+          const ovJson = await ovRes.json();
+          collisionState.overrides = ovJson.overrides || { block: [], clear: [], meta: {} };
+          drawCollisionCanvas();
+          collisionResult.textContent = 'loaded';
+        } catch (err) {
+          collisionResult.textContent = 'collision load 실패: ' + err.message;
+        }
+      }
+
+      async function saveCollisionOverrides() {
+        collisionSaveBtn.disabled = true;
+        collisionResult.textContent = 'saving...';
+        try {
+          const payload = getOverridesPayload();
+          const res = await fetch('/api/map/collision/overrides' + mapQuery(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapKey: collisionState.mapKey, overrides: payload }) });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'save failed');
+          collisionState.overrides = json.overrides;
+          drawCollisionCanvas();
+          collisionResult.textContent = 'saved';
+        } catch (err) {
+          collisionResult.textContent = 'save 실패: ' + err.message;
+        } finally { collisionSaveBtn.disabled = false; }
+      }
+
+      async function resetCollisionOverrides() {
+        try {
+          const res = await fetch('/api/map/collision/overrides/reset' + mapQuery(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mapKey: collisionState.mapKey }) });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'reset failed');
+          collisionState.overrides = json.overrides;
+          drawCollisionCanvas();
+          collisionResult.textContent = 'reset 완료';
+        } catch (err) { collisionResult.textContent = 'reset 실패: ' + err.message; }
+      }
+
+      async function refresh() {
+        if (document.activeElement?.matches?.('select[data-map-attendance], select[data-map-user], select[data-char-user]')) return;
+        try {
+          const [statusRes, logsRes, membersRes, attendanceNamesRes] = await Promise.all([
+            fetch('/api/team/status'), fetch('/api/team/logs?limit=500'), fetch('/api/discord/members'), fetch('/api/attendance/names')
+          ]);
+          const status = await statusRes.json();
+          const logs = await logsRes.json();
+          const members = await membersRes.json();
+          const attendanceNames = await attendanceNamesRes.json();
+          memberRows = members.rows || [];
+          attendanceNameRows = attendanceNames.rows || [];
+          statusCache = status;
+
+          const hideBots = !!hideBotsToggle?.checked;
+          const filteredUsers = (status.users || []).filter((u) => !hideBots || !isBotLikeUser(u));
+
+          attendanceEl.innerHTML = ''; workEl.innerHTML = ''; systemEl.innerHTML = '';
+          Object.entries(status.summary.attendance).forEach(([k, v]) => attendanceEl.appendChild(li(k, v)));
+          Object.entries(status.summary.work).forEach(([k, v]) => workEl.appendChild(li(k, v)));
+          systemEl.appendChild(li('총 인원', filteredUsers.length));
+          systemEl.appendChild(li('DB 업데이트', fmt(status.meta?.updatedAt)));
+          systemEl.appendChild(li('대시보드 갱신', fmt(status.now)));
+
+          usersBody.innerHTML = filteredUsers.map((u) => '<tr><td>' + esc(u.displayName || u.userId) + '</td><td>' + esc(u.attendanceAlias || '-') + '</td><td>' + badgeByState(u.attendance?.state) + '</td><td>' + esc(u.attendance?.rawText || '-') + '</td><td>' + fmt(u.attendance?.at) + '</td><td>' + badgeByState(u.work?.state) + '</td><td>' + esc(u.work?.summary || '-') + '</td><td>' + fmt(u.updatedAt) + '</td></tr>').join('');
+
+          const mappingRows = Object.entries(status.attendanceNameToUserId || {}).map(([attendanceName, userId]) => ({ attendanceName, userId }));
+          renderMappingRows(mappingRows);
+          renderCharacterRows(filteredUsers, status.characterSelections || {});
+          await loadStatusRoomMapping();
+
+          const botIds = new Set((status.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
+          const attendanceRows = (logs.rows || []).filter((r) => r.kind === 'attendance' && (!hideBots || !botIds.has(String(r.userId))));
+          const workRows = (logs.rows || []).filter((r) => r.kind === 'work' && (!hideBots || !botIds.has(String(r.userId))));
+
+          attendanceLogsBody.innerHTML = attendanceRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('');
+
+          const grouped = {};
+          for (const r of workRows) { const key = r.displayName || r.userId || 'unknown'; grouped[key] ||= []; grouped[key].push(r); }
+          const names = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ko'));
+          workByUserWrap.innerHTML = names.map((name) => {
+            const rows = grouped[name];
+            return '<div class="user-block"><div class="user-head">' + esc(name) + ' (' + rows.length + '건)</div><div class="table-wrap"><table><thead><tr><th>시간</th><th>상태</th><th>요약</th></tr></thead><tbody>' + rows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') + '</tbody></table></div></div>';
+          }).join('');
+
+          metaEl.textContent = '최근 동기화: ' + fmt(status.now) + ' | 전체 ' + logs.totalEvents + '건 (근태 ' + attendanceRows.length + ' / 업무 ' + workRows.length + ') | 멤버 ' + memberRows.length + '명';
+        } catch (err) {
+          metaEl.textContent = '에러: ' + err.message;
+        }
+      }
+
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+          document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+      });
+
+      applyBtn.addEventListener('click', applyMappings);
+      applyCharacterBtn.addEventListener('click', applyCharacterMappings);
+      refreshNameBtn.addEventListener('click', refreshAttendanceCandidates);
+      refreshTodayAttendanceBtn?.addEventListener('click', refreshTodayAttendance);
+      saveStatusRoomMapBtn?.addEventListener('click', saveStatusRoomMapping);
+      addMapRowBtn.addEventListener('click', () => {
+        const rows = [...document.querySelectorAll('#mapBody tr')].map((tr) => ({ attendanceName: tr.querySelector('select[data-map-attendance]')?.value || '', userId: tr.querySelector('select[data-map-user]')?.value || '' }));
+        rows.push({ attendanceName: '', userId: '' });
+        renderMappingRows(rows);
+      });
+      mapBody.addEventListener('change', (e) => { if (e.target?.matches?.('select[data-map-user], select[data-map-attendance]')) updateMappingStatusPreview(); });
+      hideBotsToggle?.addEventListener('change', refresh);
+
+      collisionCanvas?.addEventListener('contextmenu', (e) => e.preventDefault());
+      collisionCanvas?.addEventListener('mousedown', (e) => {
+        if (!collisionState.width || !collisionState.height) return;
+        const rect = collisionCanvas.getBoundingClientRect();
+        const tile = collisionCanvas.width / collisionState.width;
+        const x = Math.floor((e.clientX - rect.left) / tile);
+        const y = Math.floor((e.clientY - rect.top) / tile);
+        if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) return;
+        if (e.button === 2) applyCollisionPaint(x, y, 'clear');
+        else applyCollisionPaint(x, y, 'block');
+      });
+
+      collisionMapSelect?.addEventListener('change', () => {
+        collisionState.mapKey = collisionMapSelect.value || 'base-map';
+        loadCollisionEditor();
+      });
+
+      collisionSaveBtn?.addEventListener('click', saveCollisionOverrides);
+      collisionRevertBtn?.addEventListener('click', loadCollisionEditor);
+      collisionResetBtn?.addEventListener('click', resetCollisionOverrides);
+      collisionImportBtn?.addEventListener('click', () => collisionImportFile.click());
+      collisionImportFile?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const json = JSON.parse(text);
+          collisionState.overrides = { block: json.block || [], clear: json.clear || [], meta: json.meta || {} };
+          drawCollisionCanvas();
+          collisionResult.textContent = 'imported (로컬 미적용, Save 필요)';
+        } catch (err) {
+          collisionResult.textContent = 'import 실패: ' + err.message;
+        } finally {
+          collisionImportFile.value = '';
+        }
+      });
+      collisionExportBtn?.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(getOverridesPayload(), null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `collision-overrides-${collisionState.mapKey || 'map'}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      document.querySelector('[data-tab="collision"]')?.addEventListener('click', loadCollisionEditor);
+
+      refresh();
+      setInterval(refresh, 5000);
+    </script>
+  </body>
+</html>

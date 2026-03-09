@@ -1,0 +1,32 @@
+{
+  "name": "teamradar-map",
+  "version": "1.0.0",
+  "description": "Team radar map + discord monitor",
+  "main": "dashboard-server.js",
+  "scripts": {
+    "test": "echo \"No tests yet\"",
+    "collector:start": "node collector/index.js",
+    "monitor:discord": "node collector/index.js",
+    "monitor:src": "node src/modules/monitor/collector.js",
+    "dashboard:start": "node dashboard/index.js",
+    "dashboard": "node dashboard/index.js",
+    "dashboard:src": "node src/modules/dashboard/server.js",
+    "map:serve": "bash -lc 'cd /home/teny/.openclaw/workspace/map && python3 -m http.server 8765 --bind 0.0.0.0'",
+    "dev:up": "bash scripts/dev-up.sh",
+    "dev:status": "bash scripts/dev-status.sh",
+    "dev:down": "bash scripts/dev-down.sh",
+    "backfill:work": "node scripts/backfill-work-logs.js",
+    "db:migrate:pg": "node scripts/migrate-json-to-postgres.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.21.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "lowdb": "^7.0.1",
+    "pg": "^8.13.1",
+    "pngjs": "^7.0.0"
+  }
+}

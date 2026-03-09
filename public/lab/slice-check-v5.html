@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <title>Slice Check</title>
+  <style>
+    body{font-family:Inter,system-ui;background:#0f1420;color:#e9eef8}
+    .wrap{max-width:1500px;margin:20px auto;padding:0 16px}
+    .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .g{display:grid;grid-template-columns:repeat(6,96px);gap:8px}
+    .tile{width:96px;height:192px;image-rendering:pixelated;background:#1a2233;border:1px solid #334;display:flex;align-items:center;justify-content:center;font-size:11px;color:#7f8da5}
+    img.tile{object-fit:contain}
+    .row{margin:16px 0;padding:12px;border:1px solid #334;border-radius:8px;background:#141b29}
+    select{background:#11192a;color:#e9eef8;border:1px solid #334;border-radius:8px;padding:6px 8px}
+    code{background:#131b2c;padding:2px 6px;border-radius:6px}
+    .sourceWrap{margin-top:14px;padding:12px;border:1px solid #334;border-radius:8px;background:#141b29}
+    .sourceCanvas{max-width:100%;height:auto;image-rendering:pixelated;border:1px solid #334;background:#0b111c}
+    .hint{opacity:.85;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class='wrap'>
+    <h1>Character Slice Check (normalized)</h1>
+    <div class='top'>
+      <p>v5 추출 기준: 48x96 · idle y=96, walk y=192 (idle/walk × 4방향 × 6프레임)</p>
+      <label>캐릭터: <select id='char'></select></label>
+      <label>원본 하이라이트 상태: <select id='stateSel'><option value='idle'>idle</option><option value='walk'>walk</option></select></label>
+      <label>원본 하이라이트 방향: <select id='dirSel'><option value='right'>right</option><option value='up'>up</option><option value='left'>left</option><option value='down'>down</option></select></label>
+      <span id='meta'></span>
+    </div>
+
+    <div class='sourceWrap'>
+      <h3>원본 시트 + 크롭 그리드 오버레이</h3>
+      <div class='hint'>하늘색: 48px 열, 보라색: 96px 행, 주황색: 방향 경계(6프레임), 초록색: 현재 하이라이트 영역 + 텍스트 태그</div>
+      <canvas id='sourceCanvas' class='sourceCanvas'></canvas>
+    </div>
+
+    <div id='app'></div>
+  </div>
+
+  <script>
+    const chars = Array.from({length:20}, (_,i)=>`Premade_Character_48x48_${String(i+1).padStart(2,'0')}`);
+    const dirs=['right','up','left','down'];
+    const states=['idle','walk'];
+    const app=document.getElementById('app');
+    const sel=document.getElementById('char');
+    const stateSel=document.getElementById('stateSel');
+    const dirSel=document.getElementById('dirSel');
+    const sourceCanvas=document.getElementById('sourceCanvas');
+    const sctx=sourceCanvas.getContext('2d');
+
+    const TILE_W = 48;
+    const TILE_H = 96;
+    const FRAMES = 6;
+    const Y = { idle: 96, walk: 192 };
+
+    chars.forEach(c=>{
+      const o=document.createElement('option');
+      o.value=c;o.textContent=c;sel.appendChild(o);
+    });
+
+    async function loadMeta(){
+      try{
+        const m=await fetch('../assets/characters/sliced_v5/manifest.json').then(r=>r.json());
+        document.getElementById('meta').innerHTML=`<code>entries ${m.length} · mode sliced_v5(48x96, y=96/192)</code>`;
+      }catch{}
+    }
+
+    async function drawSourceOverlay() {
+      const src = `../assets/characters/${sel.value}.png`;
+      const img = new Image();
+      img.src = src + `?t=${Date.now()}`;
+      await img.decode();
+
+      sourceCanvas.width = img.width;
+      sourceCanvas.height = img.height;
+      sctx.clearRect(0,0,img.width,img.height);
+      sctx.drawImage(img,0,0);
+
+      // 48px grid (cyan)
+      sctx.strokeStyle = 'rgba(0,255,255,0.55)';
+      sctx.lineWidth = 1;
+      for (let x=0; x<=img.width; x+=TILE_W) {
+        sctx.beginPath(); sctx.moveTo(x+0.5,0); sctx.lineTo(x+0.5,img.height); sctx.stroke();
+      }
+
+      // 96px grid (magenta)
+      sctx.strokeStyle = 'rgba(255,0,255,0.55)';
+      for (let y=0; y<=img.height; y+=TILE_H) {
+        sctx.beginPath(); sctx.moveTo(0,y+0.5); sctx.lineTo(img.width,y+0.5); sctx.stroke();
+      }
+
+      // Direction boundaries (orange every 288)
+      sctx.strokeStyle = 'rgba(255,140,0,0.95)';
+      sctx.lineWidth = 2;
+      for (let x=0; x<=img.width; x+=TILE_W*FRAMES) {
+        sctx.beginPath(); sctx.moveTo(x+0.5,0); sctx.lineTo(x+0.5,img.height); sctx.stroke();
+      }
+
+      // Highlight selected state+dir frames and labels
+      const st = stateSel.value;
+      const dir = dirSel.value;
+      const dirIdx = dirs.indexOf(dir);
+      const startX = dirIdx * FRAMES * TILE_W;
+      const y = Y[st];
+
+      sctx.lineWidth = 2;
+      sctx.strokeStyle = 'rgba(0,255,120,0.95)';
+      sctx.fillStyle = 'rgba(0,255,120,0.08)';
+      sctx.font = '13px monospace';
+
+      for (let i=0; i<FRAMES; i++) {
+        const x = startX + i*TILE_W;
+        sctx.fillRect(x, y, TILE_W, TILE_H);
+        sctx.strokeRect(x+0.5, y+0.5, TILE_W-1, TILE_H-1);
+        sctx.fillStyle = 'rgba(0,255,120,0.95)';
+        sctx.fillText(`${st}_${dir}_f${i+1}`, x+2, y+14);
+        sctx.fillStyle = 'rgba(0,255,120,0.08)';
+      }
+
+      sctx.fillStyle = 'rgba(255,255,255,0.9)';
+      sctx.font = '14px monospace';
+      sctx.fillText(`highlight: ${st} ${dir} | y=${y} | x=${startX}..${startX + FRAMES*TILE_W - 1}`, 8, 20);
+    }
+
+    function render() {
+      const base=`../assets/characters/sliced_v5/${sel.value}`;
+      app.innerHTML='';
+
+      for (const st of states) {
+        for (const d of dirs) {
+          const row=document.createElement('div');
+          row.className='row';
+          row.innerHTML=`<h3>${st} · ${d}</h3>`;
+
+          const g=document.createElement('div');
+          g.className='g';
+
+          for (let i=1;i<=6;i++) {
+            const img=document.createElement('img');
+            img.className='tile';
+            img.src=`${base}/${st}_${d}_f${i}.png?t=${Date.now()}`;
+            img.alt=`${st}-${d}-f${i}`;
+            g.appendChild(img);
+          }
+
+          row.appendChild(g);
+          app.appendChild(row);
+        }
+      }
+
+      drawSourceOverlay();
+    }
+
+    sel.addEventListener('change', render);
+    stateSel.addEventListener('change', drawSourceOverlay);
+    dirSel.addEventListener('change', drawSourceOverlay);
+
+    loadMeta();
+    render();
+  </script>
+</body>
+</html>

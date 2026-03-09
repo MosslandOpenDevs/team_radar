@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TeamRadar Character Animation Lab</title>
+  <link rel="stylesheet" href="./character-lab.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Character Animation Lab (48x48)</h1>
+      <p>2번째 줄(idle), 3번째 줄(walk) · 방향 순서: Right/Up/Left/Down (각 5프레임)</p>
+      <a href="/dashboard">← TeamRadar 대시보드로 돌아가기</a>
+    </header>
+
+    <section class="controls">
+      <label>동작
+        <select id="mode">
+          <option value="idle">Idle (2nd row)</option>
+          <option value="walk" selected>Walk (3rd row)</option>
+        </select>
+      </label>
+      <label>방향
+        <select id="dir">
+          <option value="right">Right</option>
+          <option value="up">Up</option>
+          <option value="left">Left</option>
+          <option value="down" selected>Down</option>
+        </select>
+      </label>
+      <label>FPS
+        <input id="fps" type="range" min="4" max="20" value="10" />
+      </label>
+      <span id="fpsValue">10 fps</span>
+    </section>
+
+    <section id="grid" class="grid"></section>
+  </main>
+
+  <script src="./character-lab.js"></script>
+</body>
+</html>

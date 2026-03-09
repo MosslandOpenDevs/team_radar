@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+data/
+public/reports/
+*.log
+*.sqlite
+*.db
+*.dump
+*.pem
+*.key
+.DS_Store
