@@ -232,7 +232,12 @@ app.get('/api/team/logs', async (req, res) => {
   const rows = [...db.events]
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
     .filter((e) => !hideBots || !botIds.has(String(e.userId)))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((e) => ({
+      ...e,
+      scheduledFor: e.scheduledFor || e?.raw_payload?.scheduledFor || null,
+      durationText: e.durationText || e?.raw_payload?.durationText || null,
+    }));
 
   res.json({ now: new Date().toISOString(), limit, totalEvents: rows.length, rows });
 });

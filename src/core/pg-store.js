@@ -216,7 +216,7 @@ async function getDashboardStatus() {
 
 async function getLogs(limit = 30) {
   const res = await q(
-    `select user_id, display_name, kind, state, summary, attendance_name, channel_id, message_id, occurred_at
+    `select user_id, display_name, kind, state, summary, attendance_name, channel_id, message_id, occurred_at, raw_payload
      from events
      order by occurred_at desc
      limit $1`,
@@ -235,6 +235,8 @@ async function getLogs(limit = 30) {
       channelId: r.channel_id,
       messageId: r.message_id,
       at: r.occurred_at ? new Date(r.occurred_at).toISOString() : null,
+      scheduledFor: r.raw_payload?.scheduledFor || null,
+      durationText: r.raw_payload?.durationText || null,
     })),
   };
 }
