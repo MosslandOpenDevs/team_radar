@@ -118,11 +118,14 @@ client.on(Events.MessageCreate, async (message) => {
     const rawText = getAttendanceSourceText(message);
     const state = parseAttendanceState(rawText);
     const attendanceName = extractAttendanceName(rawText);
+    const scheduleInfo = extractScheduleInfo(rawText);
 
     user.attendance = {
       state,
       attendanceName,
       rawText,
+      scheduledFor: scheduleInfo.scheduledFor,
+      durationText: scheduleInfo.durationText,
       channelId: message.channelId,
       messageId: message.id,
       at: message.createdAt.toISOString(),
@@ -132,6 +135,8 @@ client.on(Events.MessageCreate, async (message) => {
       db.data.attendanceByName[attendanceName] = {
         state,
         rawText,
+        scheduledFor: scheduleInfo.scheduledFor,
+        durationText: scheduleInfo.durationText,
         channelId: message.channelId,
         messageId: message.id,
         at: message.createdAt.toISOString(),
@@ -145,6 +150,8 @@ client.on(Events.MessageCreate, async (message) => {
       state,
       attendanceName,
       summary: rawText,
+      scheduledFor: scheduleInfo.scheduledFor,
+      durationText: scheduleInfo.durationText,
       channelId: message.channelId,
       messageId: message.id,
       at: message.createdAt.toISOString(),
@@ -242,6 +249,7 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
         const rawText = getAttendanceSourceText(msg);
         const state = parseAttendanceState(rawText);
         const attendanceName = extractAttendanceName(rawText);
+        const scheduleInfo = extractScheduleInfo(rawText);
 
         const user = getOrCreateUser(userId, displayName);
         user.displayName = displayName;
@@ -250,6 +258,8 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
           state,
           attendanceName,
           rawText,
+          scheduledFor: scheduleInfo.scheduledFor,
+          durationText: scheduleInfo.durationText,
           channelId: msg.channelId,
           messageId: msg.id,
           at: msg.createdAt.toISOString(),
@@ -258,6 +268,8 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
           db.data.attendanceByName[attendanceName] = {
             state,
             rawText,
+            scheduledFor: scheduleInfo.scheduledFor,
+            durationText: scheduleInfo.durationText,
             channelId: msg.channelId,
             messageId: msg.id,
             at: msg.createdAt.toISOString(),
@@ -273,6 +285,8 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
             state,
             attendanceName,
             summary: rawText,
+            scheduledFor: scheduleInfo.scheduledFor,
+            durationText: scheduleInfo.durationText,
             channelId: msg.channelId,
             messageId: msg.id,
             at: msg.createdAt.toISOString(),
@@ -664,6 +678,25 @@ function extractAttendanceName(text) {
   if (basic?.[1]) return basic[1];
 
   return null;
+}
+
+function extractScheduleInfo(text) {
+  const t = compact(text || '');
+  if (!t) return { scheduledFor: null, durationText: null };
+
+  const dateMatch = t.match(/Scheduled\s*for\s*([^\n]+?)(?:\s+Duration\b|$)/i);
+  const durationMatch = t.match(/Duration\s*([^\n]+)$/i);
+
+  const dateRaw = compact(dateMatch?.[1] || '');
+  const durationText = compact(durationMatch?.[1] || '') || null;
+
+  let scheduledFor = null;
+  if (dateRaw) {
+    const parsed = new Date(dateRaw);
+    if (!Number.isNaN(parsed.getTime())) scheduledFor = parsed.toISOString();
+  }
+
+  return { scheduledFor, durationText };
 }
 
 function parseWorkState(text) {

@@ -176,14 +176,14 @@
         </div>
         <div class="table-wrap" style="margin-bottom:12px;">
           <table>
-            <thead><tr><th>시간</th><th>이름</th><th>유형</th><th>요약</th></tr></thead>
+            <thead><tr><th>기록시간</th><th>예정일</th><th>이름</th><th>유형</th><th>요약</th></tr></thead>
             <tbody id="leaveLogsBody"></tbody>
           </table>
         </div>
         <h3 class="section-title" style="font-size:14px; margin-top:10px;">분류 실패/미분류 메시지</h3>
         <div class="table-wrap" style="margin-bottom:12px;">
           <table>
-            <thead><tr><th>시간</th><th>이름</th><th>상태</th><th>원문 요약</th></tr></thead>
+            <thead><tr><th>기록시간</th><th>예정일</th><th>이름</th><th>상태</th><th>원문 요약</th></tr></thead>
             <tbody id="unclassifiedLogsBody"></tbody>
           </table>
         </div>
@@ -688,8 +688,8 @@
           const unclassifiedRows = (unclassifiedData.rows || []);
 
           attendanceLogsBody.innerHTML = attendanceRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('');
-          leaveLogsBody.innerHTML = leaveRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') || '<tr><td colspan="4" class="muted">조회된 반차/연차/재택 기록이 없습니다.</td></tr>';
-          unclassifiedLogsBody.innerHTML = unclassifiedRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state || '업데이트') + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') || '<tr><td colspan="4" class="muted">미분류 메시지가 없습니다.</td></tr>';
+          leaveLogsBody.innerHTML = leaveRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + fmt(r.scheduledFor) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + (r.durationText ? ' <span class="muted">(기간: ' + esc(r.durationText) + ')</span>' : '') + '</td></tr>').join('') || '<tr><td colspan="5" class="muted">조회된 반차/연차/재택 기록이 없습니다.</td></tr>';
+          unclassifiedLogsBody.innerHTML = unclassifiedRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + fmt(r.scheduledFor) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state || '업데이트') + '</td><td>' + esc(r.summary || '-') + (r.durationText ? ' <span class="muted">(기간: ' + esc(r.durationText) + ')</span>' : '') + '</td></tr>').join('') || '<tr><td colspan="5" class="muted">미분류 메시지가 없습니다.</td></tr>';
           leaveMeta.textContent = `휴무/재택 ${leaveRows.length}건 · 미분류 ${unclassifiedRows.length}건`;
 
 
