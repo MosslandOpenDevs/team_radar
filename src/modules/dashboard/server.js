@@ -988,7 +988,7 @@ function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserI
     const scheduled = facts.scheduledState;
     let effective = u.attendance?.state || '업데이트';
 
-    if (scheduled === '재택근무') effective = '재택근무';
+    if (scheduled === '재택근무') effective = facts.hasCheckIn ? '재택근무' : '안출근';
     else if (scheduled === '휴가') effective = facts.hasCheckIn ? '출근' : '휴가';
     else if (scheduled === '오전반차' || scheduled === '반차') effective = facts.hasCheckIn ? '출근' : '휴가';
     else if (scheduled === '오후반차') effective = facts.hasCheckOut ? '휴가' : (facts.hasCheckIn ? '출근' : '안출근');
