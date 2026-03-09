@@ -138,6 +138,8 @@
           <button id="saveStatusRoomMapBtn" class="btn">상태맵 매핑 저장</button>
           <span class="muted" id="statusRoomMapResult"></span>
         </div>
+        <div class="muted" style="margin:4px 0 10px;">슬롯 번호와 실제 맵 이미지를 같이 확인할 수 있어요.</div>
+        <div id="statusSlotPreview" class="map-grid-2x2" style="margin-bottom:10px;"></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>상태</th><th>맵 슬롯(1~4)</th></tr></thead>
@@ -260,6 +262,7 @@
       const addMapRowBtn = document.getElementById('addMapRowBtn');
       const saveStatusRoomMapBtn = document.getElementById('saveStatusRoomMapBtn');
       const statusRoomMapResult = document.getElementById('statusRoomMapResult');
+      const statusSlotPreview = document.getElementById('statusSlotPreview');
       const slotWorking = document.getElementById('slotWorking');
       const slotOffwork = document.getElementById('slotOffwork');
       const slotRemote = document.getElementById('slotRemote');
@@ -295,6 +298,7 @@
         maskBlocked: new Set(),
         overrides: { block: [], clear: [], meta: {} },
       };
+      let statusRoomMapDirty = false;
 
       function li(k, v) { const node = document.createElement('li'); node.textContent = k + ': ' + v; return node; }
       function badgeByState(state) { const s = state || '-'; const cls = /완료|출근|복귀/.test(s) ? 'ok' : /이슈|지각/.test(s) ? 'danger' : 'warn'; return '<span class="pill ' + cls + '">' + s + '</span>'; }
@@ -360,16 +364,32 @@
         }).join('');
       }
 
-      async function loadStatusRoomMapping() {
+      function renderStatusSlotPreview(catalog = [], layout2x2 = []) {
+        if (!statusSlotPreview) return;
+        const slots = (layout2x2?.length ? layout2x2 : catalog.slice(0, 4).map((m, i) => ({ slot: i + 1, key: m.key })));
+        statusSlotPreview.innerHTML = slots.slice(0, 4).map(({ slot, key }) => {
+          const m = catalog.find((x) => x.key === key) || null;
+          if (!m) return `<div class="map-slot"><div class="slot-head"><strong>${slot}</strong><span>-</span></div></div>`;
+          return `<div class="map-slot"><div class="slot-head"><strong>슬롯 ${slot}</strong><span>${m.label}</span></div><img src="/assets/custom-map/${m.baseFile}" alt="${m.label}" /></div>`;
+        }).join('');
+      }
+
+      async function loadStatusRoomMapping(force = false) {
         try {
-          const res = await fetch('/api/map/status-room-mapping');
-          const json = await res.json();
-          if (!res.ok || !json.ok) throw new Error(json.error || 'load failed');
+          if (statusRoomMapDirty && !force) return;
+          const [mapRes, catalogRes] = await Promise.all([
+            fetch('/api/map/status-room-mapping'),
+            fetch('/api/map/collision/catalog'),
+          ]);
+          const json = await mapRes.json();
+          const catalogJson = await catalogRes.json();
+          if (!mapRes.ok || !json.ok) throw new Error(json.error || 'load failed');
           const m = json.mapping || {};
           slotWorking.value = String(m.slotByStatus?.working ?? 0);
           slotOffwork.value = String(m.slotByStatus?.offwork ?? m.slotByStatus?.idle ?? 1);
           slotRemote.value = String(m.slotByStatus?.remote ?? 2);
           slotVacation.value = String(m.slotByStatus?.vacation ?? 3);
+          renderStatusSlotPreview(catalogJson?.maps || [], catalogJson?.layout2x2 || []);
         } catch (err) {
           statusRoomMapResult.textContent = '상태맵 로드 실패: ' + err.message;
         }
@@ -394,7 +414,9 @@
           });
           const json = await res.json();
           if (!res.ok || !json.ok) throw new Error(json.error || 'save failed');
+          statusRoomMapDirty = false;
           statusRoomMapResult.textContent = '저장 완료';
+          await loadStatusRoomMapping(true);
         } catch (err) {
           statusRoomMapResult.textContent = '저장 실패: ' + err.message;
         } finally {
@@ -732,6 +754,12 @@
       refreshNameBtn.addEventListener('click', refreshAttendanceCandidates);
       refreshTodayAttendanceBtn?.addEventListener('click', refreshTodayAttendance);
       saveStatusRoomMapBtn?.addEventListener('click', saveStatusRoomMapping);
+      [slotWorking, slotOffwork, slotRemote, slotVacation].forEach((el) => {
+        el?.addEventListener('change', () => {
+          statusRoomMapDirty = true;
+          statusRoomMapResult.textContent = '변경됨 (저장 전)';
+        });
+      });
       addMapRowBtn.addEventListener('click', () => {
         const rows = [...document.querySelectorAll('#mapBody tr')].map((tr) => ({ attendanceName: tr.querySelector('select[data-map-attendance]')?.value || '', userId: tr.querySelector('select[data-map-user]')?.value || '' }));
         rows.push({ attendanceName: '', userId: '' });
