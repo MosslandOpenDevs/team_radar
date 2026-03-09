@@ -295,6 +295,64 @@ app.get('/api/team/leave', async (req, res) => {
   return res.json({ now: new Date().toISOString(), days, limit, total: rows.length, rows });
 });
 
+app.get('/api/team/attendance-unclassified', async (req, res) => {
+  const days = Math.max(1, Math.min(60, Number(req.query.days || 14)));
+  const limit = Math.max(1, Math.min(300, Number(req.query.limit || 100)));
+  const hideBots = String(req.query.hideBots || '').toLowerCase() === '1' || String(req.query.hideBots || '').toLowerCase() === 'true';
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  const unclassifiedStates = new Set(['업데이트', 'unknown', '']);
+
+  if (pgStore.pgEnabled) {
+    try {
+      const logs = await pgStore.getLogs(limit * 5);
+      let rows = (logs.rows || []).filter((e) => e.kind === 'attendance' && unclassifiedStates.has(String(e.state || '')) && e.at && new Date(e.at).getTime() >= sinceMs);
+      if (hideBots) {
+        const status = await pgStore.getDashboardStatus();
+        const botIds = new Set((status.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
+        rows = rows.filter((r) => !botIds.has(String(r.userId)));
+      }
+      rows = rows
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+        .slice(0, limit)
+        .map((e) => ({
+          userId: e.userId,
+          displayName: e.displayName,
+          attendanceName: e.attendanceName || null,
+          state: e.state || '업데이트',
+          at: e.at,
+          channelId: e.channelId || null,
+          messageId: e.messageId || null,
+          summary: e.summary || null,
+        }));
+
+      return res.json({ now: new Date().toISOString(), days, limit, total: rows.length, rows });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  const db = readDb();
+  const botIds = new Set((db.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
+  const rows = [...db.events]
+    .filter((e) => e.kind === 'attendance' && unclassifiedStates.has(String(e.state || '')) && e.at)
+    .filter((e) => new Date(e.at).getTime() >= sinceMs)
+    .filter((e) => !hideBots || !botIds.has(String(e.userId)))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, limit)
+    .map((e) => ({
+      userId: e.userId,
+      displayName: e.displayName,
+      attendanceName: e.attendanceName || null,
+      state: e.state || '업데이트',
+      at: e.at,
+      channelId: e.channelId || null,
+      messageId: e.messageId || null,
+      summary: e.summary || null,
+    }));
+
+  return res.json({ now: new Date().toISOString(), days, limit, total: rows.length, rows });
+});
+
 app.get('/api/discord/members', (req, res) => {
   res.json({
     now: new Date().toISOString(),

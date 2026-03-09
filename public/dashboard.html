@@ -180,6 +180,13 @@
             <tbody id="leaveLogsBody"></tbody>
           </table>
         </div>
+        <h3 class="section-title" style="font-size:14px; margin-top:10px;">분류 실패/미분류 메시지</h3>
+        <div class="table-wrap" style="margin-bottom:12px;">
+          <table>
+            <thead><tr><th>시간</th><th>이름</th><th>상태</th><th>원문 요약</th></tr></thead>
+            <tbody id="unclassifiedLogsBody"></tbody>
+          </table>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>시간</th><th>이름</th><th>상태</th><th>요약</th></tr></thead>
@@ -241,6 +248,7 @@
       const usersBody = document.getElementById('usersBody');
       const attendanceLogsBody = document.getElementById('attendanceLogsBody');
       const leaveLogsBody = document.getElementById('leaveLogsBody');
+      const unclassifiedLogsBody = document.getElementById('unclassifiedLogsBody');
       const leaveDaysInput = document.getElementById('leaveDaysInput');
       const leaveRefreshBtn = document.getElementById('leaveRefreshBtn');
       const leaveMeta = document.getElementById('leaveMeta');
@@ -638,18 +646,20 @@
         if (document.activeElement?.matches?.('select[data-map-attendance], select[data-map-user], select[data-char-user]')) return;
         try {
           const leaveDays = Math.max(1, Math.min(60, Number(leaveDaysInput?.value || 30)));
-          const [statusRes, logsRes, membersRes, attendanceNamesRes, leaveRes] = await Promise.all([
+          const [statusRes, logsRes, membersRes, attendanceNamesRes, leaveRes, unclassifiedRes] = await Promise.all([
             fetch('/api/team/status'),
             fetch('/api/team/logs?limit=500'),
             fetch('/api/discord/members'),
             fetch('/api/attendance/names'),
             fetch('/api/team/leave?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
+            fetch('/api/team/attendance-unclassified?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
           ]);
           const status = await statusRes.json();
           const logs = await logsRes.json();
           const members = await membersRes.json();
           const attendanceNames = await attendanceNamesRes.json();
           const leaveData = await leaveRes.json();
+          const unclassifiedData = await unclassifiedRes.json();
           memberRows = members.rows || [];
           attendanceNameRows = attendanceNames.rows || [];
           statusCache = status;
@@ -675,10 +685,12 @@
           const attendanceRows = (logs.rows || []).filter((r) => r.kind === 'attendance' && (!hideBots || !botIds.has(String(r.userId))));
           const workRows = (logs.rows || []).filter((r) => r.kind === 'work' && (!hideBots || !botIds.has(String(r.userId))));
           const leaveRows = (leaveData.rows || []);
+          const unclassifiedRows = (unclassifiedData.rows || []);
 
           attendanceLogsBody.innerHTML = attendanceRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('');
           leaveLogsBody.innerHTML = leaveRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') || '<tr><td colspan="4" class="muted">조회된 반차/연차/재택 기록이 없습니다.</td></tr>';
-          leaveMeta.textContent = `총 ${leaveRows.length}건`;
+          unclassifiedLogsBody.innerHTML = unclassifiedRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state || '업데이트') + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') || '<tr><td colspan="4" class="muted">미분류 메시지가 없습니다.</td></tr>';
+          leaveMeta.textContent = `휴무/재택 ${leaveRows.length}건 · 미분류 ${unclassifiedRows.length}건`;
 
 
           const grouped = {};
