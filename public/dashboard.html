@@ -167,6 +167,19 @@
 
       <section id="tab-attendance" class="tab-panel">
         <h3 class="section-title">최근 근태 이벤트</h3>
+        <div class="actions">
+          <label>조회 기간(일)
+            <input id="leaveDaysInput" class="input" type="number" min="1" max="60" value="30" style="width:90px; margin-left:6px;" />
+          </label>
+          <button id="leaveRefreshBtn" class="btn">반차/연차/재택 다시조회</button>
+          <span class="muted" id="leaveMeta"></span>
+        </div>
+        <div class="table-wrap" style="margin-bottom:12px;">
+          <table>
+            <thead><tr><th>시간</th><th>이름</th><th>유형</th><th>요약</th></tr></thead>
+            <tbody id="leaveLogsBody"></tbody>
+          </table>
+        </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>시간</th><th>이름</th><th>상태</th><th>요약</th></tr></thead>
@@ -227,6 +240,10 @@
       const systemEl = document.getElementById('systemSummary');
       const usersBody = document.getElementById('usersBody');
       const attendanceLogsBody = document.getElementById('attendanceLogsBody');
+      const leaveLogsBody = document.getElementById('leaveLogsBody');
+      const leaveDaysInput = document.getElementById('leaveDaysInput');
+      const leaveRefreshBtn = document.getElementById('leaveRefreshBtn');
+      const leaveMeta = document.getElementById('leaveMeta');
       const workByUserWrap = document.getElementById('workByUserWrap');
       const metaEl = document.getElementById('meta');
       const applyBtn = document.getElementById('applyBtn');
@@ -620,13 +637,19 @@
       async function refresh() {
         if (document.activeElement?.matches?.('select[data-map-attendance], select[data-map-user], select[data-char-user]')) return;
         try {
-          const [statusRes, logsRes, membersRes, attendanceNamesRes] = await Promise.all([
-            fetch('/api/team/status'), fetch('/api/team/logs?limit=500'), fetch('/api/discord/members'), fetch('/api/attendance/names')
+          const leaveDays = Math.max(1, Math.min(60, Number(leaveDaysInput?.value || 30)));
+          const [statusRes, logsRes, membersRes, attendanceNamesRes, leaveRes] = await Promise.all([
+            fetch('/api/team/status'),
+            fetch('/api/team/logs?limit=500'),
+            fetch('/api/discord/members'),
+            fetch('/api/attendance/names'),
+            fetch('/api/team/leave?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
           ]);
           const status = await statusRes.json();
           const logs = await logsRes.json();
           const members = await membersRes.json();
           const attendanceNames = await attendanceNamesRes.json();
+          const leaveData = await leaveRes.json();
           memberRows = members.rows || [];
           attendanceNameRows = attendanceNames.rows || [];
           statusCache = status;
@@ -651,8 +674,12 @@
           const botIds = new Set((status.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
           const attendanceRows = (logs.rows || []).filter((r) => r.kind === 'attendance' && (!hideBots || !botIds.has(String(r.userId))));
           const workRows = (logs.rows || []).filter((r) => r.kind === 'work' && (!hideBots || !botIds.has(String(r.userId))));
+          const leaveRows = (leaveData.rows || []);
 
           attendanceLogsBody.innerHTML = attendanceRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('');
+          leaveLogsBody.innerHTML = leaveRows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + esc(r.attendanceName || r.displayName || r.userId) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') || '<tr><td colspan="4" class="muted">조회된 반차/연차/재택 기록이 없습니다.</td></tr>';
+          leaveMeta.textContent = `총 ${leaveRows.length}건`;
+
 
           const grouped = {};
           for (const r of workRows) { const key = r.displayName || r.userId || 'unknown'; grouped[key] ||= []; grouped[key].push(r); }
@@ -689,6 +716,8 @@
       });
       mapBody.addEventListener('change', (e) => { if (e.target?.matches?.('select[data-map-user], select[data-map-attendance]')) updateMappingStatusPreview(); });
       hideBotsToggle?.addEventListener('change', refresh);
+      leaveRefreshBtn?.addEventListener('click', refresh);
+      leaveDaysInput?.addEventListener('change', refresh);
 
       collisionCanvas?.addEventListener('contextmenu', (e) => e.preventDefault());
       collisionCanvas?.addEventListener('mousedown', (e) => {
