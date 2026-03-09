@@ -237,6 +237,64 @@ app.get('/api/team/logs', async (req, res) => {
   res.json({ now: new Date().toISOString(), limit, totalEvents: rows.length, rows });
 });
 
+app.get('/api/team/leave', async (req, res) => {
+  const days = Math.max(1, Math.min(60, Number(req.query.days || 14)));
+  const limit = Math.max(1, Math.min(300, Number(req.query.limit || 100)));
+  const hideBots = String(req.query.hideBots || '').toLowerCase() === '1' || String(req.query.hideBots || '').toLowerCase() === 'true';
+  const leaveStates = new Set(['오전반차', '오후반차', '반차', '휴가', '재택근무']);
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  if (pgStore.pgEnabled) {
+    try {
+      const logs = await pgStore.getLogs(limit * 5);
+      let rows = (logs.rows || []).filter((e) => e.kind === 'attendance' && leaveStates.has(e.state || '') && e.at && new Date(e.at).getTime() >= sinceMs);
+      if (hideBots) {
+        const status = await pgStore.getDashboardStatus();
+        const botIds = new Set((status.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
+        rows = rows.filter((r) => !botIds.has(String(r.userId)));
+      }
+      rows = rows
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+        .slice(0, limit)
+        .map((e) => ({
+          userId: e.userId,
+          displayName: e.displayName,
+          attendanceName: e.attendanceName || null,
+          state: e.state,
+          at: e.at,
+          channelId: e.channelId || null,
+          messageId: e.messageId || null,
+          summary: e.summary || null,
+        }));
+
+      return res.json({ now: new Date().toISOString(), days, limit, total: rows.length, rows });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  const db = readDb();
+  const botIds = new Set((db.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
+  const rows = [...db.events]
+    .filter((e) => e.kind === 'attendance' && leaveStates.has(e.state || '') && e.at)
+    .filter((e) => new Date(e.at).getTime() >= sinceMs)
+    .filter((e) => !hideBots || !botIds.has(String(e.userId)))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, limit)
+    .map((e) => ({
+      userId: e.userId,
+      displayName: e.displayName,
+      attendanceName: e.attendanceName || null,
+      state: e.state,
+      at: e.at,
+      channelId: e.channelId || null,
+      messageId: e.messageId || null,
+      summary: e.summary || null,
+    }));
+
+  return res.json({ now: new Date().toISOString(), days, limit, total: rows.length, rows });
+});
+
 app.get('/api/discord/members', (req, res) => {
   res.json({
     now: new Date().toISOString(),
@@ -793,7 +851,7 @@ function isBotLikeUser(u = {}) {
 function buildSummary(users = []) {
   const summary = {
     total: users.length,
-    attendance: { 출근:0, 퇴근:0, 휴가:0, 반차:0, 재택근무:0, 자리비움:0, 지각:0, 복귀:0, 업데이트:0, unknown:0 },
+    attendance: { 출근:0, 퇴근:0, 휴가:0, 오전반차:0, 오후반차:0, 반차:0, 재택근무:0, 자리비움:0, 지각:0, 복귀:0, 업데이트:0, unknown:0 },
     work: { 진행중:0, 완료:0, 대기:0, 이슈:0, 리뷰중:0, 업데이트:0, unknown:0 },
   };
 
@@ -846,6 +904,8 @@ function parseAttendanceState(text) {
   if (/지각/.test(t)) return '지각';
   if (/복귀/.test(t)) return '복귀';
   if (/재택/.test(t)) return '재택근무';
+  if (/오전\s*반차|am\s*half/.test(t)) return '오전반차';
+  if (/오후\s*반차|pm\s*half/.test(t)) return '오후반차';
   if (/반차/.test(t)) return '반차';
   if (/연차|휴가/.test(t)) return '휴가';
   if (/외근|자리비움/.test(t)) return '자리비움';

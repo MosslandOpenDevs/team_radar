@@ -408,6 +408,7 @@ function shouldHandleCommand(message) {
   const isCmd =
     message.content.startsWith('!teamstatus') ||
     message.content.startsWith('!teamlogs') ||
+    message.content.startsWith('!teamleave') ||
     message.content.startsWith('!mapname') ||
     message.content.startsWith('!unmapname') ||
     message.content.startsWith('!namemap');
@@ -420,6 +421,11 @@ function shouldHandleCommand(message) {
 async function handleCommand(message) {
   if (message.content.startsWith('!teamlogs')) {
     await handleLogsCommand(message);
+    return;
+  }
+
+  if (message.content.startsWith('!teamleave')) {
+    await handleLeaveCommand(message);
     return;
   }
 
@@ -468,6 +474,31 @@ async function handleLogsCommand(message) {
     content: latestEvents.length
       ? `🧾 **최근 이벤트(15개)**\n${latestEvents.join('\n')}`
       : '아직 이벤트 로그가 없어요.',
+    allowedMentions: { repliedUser: false },
+  });
+}
+
+async function handleLeaveCommand(message) {
+  const parts = message.content.trim().split(/\s+/);
+  const days = Math.max(1, Math.min(60, Number(parts[1] || 14)));
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  const leaveStates = new Set(['오전반차', '오후반차', '반차', '휴가', '재택근무']);
+
+  const picked = [...db.data.events]
+    .filter((e) => e.kind === 'attendance' && leaveStates.has(e.state || '') && e.at)
+    .filter((e) => new Date(e.at).getTime() >= sinceMs)
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    .slice(0, 30)
+    .map((e) => {
+      const when = new Date(e.at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const who = e.attendanceName || e.displayName || 'unknown';
+      return `• ${who} | ${e.state} | ${when}`;
+    });
+
+  await message.reply({
+    content: picked.length
+      ? `🏖️ **휴무/재택 현황 (최근 ${days}일, 최대 30건)**\n${picked.join('\n')}`
+      : `최근 ${days}일 내 반차/연차/재택근무 기록이 없어요.`,
     allowedMentions: { repliedUser: false },
   });
 }
@@ -590,6 +621,8 @@ function parseAttendanceState(text) {
   if (/출근|on\s?duty|check\s?in/.test(t)) return '출근';
   if (/지각|late/.test(t)) return '지각';
   if (/재택근무|재택|remote|wfh|work from home/.test(t)) return '재택근무';
+  if (/오전\s*반차|am\s*half/.test(t)) return '오전반차';
+  if (/오후\s*반차|pm\s*half/.test(t)) return '오후반차';
   if (/반차/.test(t)) return '반차';
   if (/휴가|연차|pto|vacation/.test(t)) return '휴가';
   if (/외근|자리비움|away|afk/.test(t)) return '자리비움';
