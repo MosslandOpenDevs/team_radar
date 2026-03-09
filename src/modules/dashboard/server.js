@@ -169,7 +169,9 @@ app.get('/api/team/status', async (req, res) => {
   if (pgStore.pgEnabled) {
     try {
       const status = await pgStore.getDashboardStatus();
-      const users = hideBots ? (status.users || []).filter((u) => !isBotLikeUser(u)) : (status.users || []);
+      const logs = await pgStore.getLogs(5000);
+      const effectiveUsers = applyEffectiveAttendance(status.users || [], logs.rows || [], status.attendanceNameToUserId || {});
+      const users = hideBots ? effectiveUsers.filter((u) => !isBotLikeUser(u)) : effectiveUsers;
       const summary = buildSummary(users);
       return res.json({ now: new Date().toISOString(), ...status, users, summary });
     } catch (err) {
@@ -192,6 +194,8 @@ app.get('/api/team/status', async (req, res) => {
       characterSheet: db.characterSelections?.[u.userId] || null,
     }))
     .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+
+  users = applyEffectiveAttendance(users, db.events || [], attendanceNameToUserId || {});
 
   if (hideBots) users = users.filter((u) => !isBotLikeUser(u));
 
@@ -922,7 +926,7 @@ function isBotLikeUser(u = {}) {
 function buildSummary(users = []) {
   const summary = {
     total: users.length,
-    attendance: { 출근:0, 퇴근:0, 휴가:0, 오전반차:0, 오후반차:0, 반차:0, 재택근무:0, 자리비움:0, 지각:0, 복귀:0, 업데이트:0, unknown:0 },
+    attendance: { 출근:0, 퇴근:0, 휴가:0, 오전반차:0, 오후반차:0, 반차:0, 재택근무:0, 자리비움:0, 지각:0, 복귀:0, 안출근:0, 업데이트:0, unknown:0 },
     work: { 진행중:0, 완료:0, 대기:0, 이슈:0, 리뷰중:0, 업데이트:0, unknown:0 },
   };
 
@@ -933,6 +937,74 @@ function buildSummary(users = []) {
     summary.work[w] = (summary.work[w] || 0) + 1;
   }
   return summary;
+}
+
+function kstDateKey(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserId = {}) {
+  const todayKey = kstDateKey(new Date().toISOString());
+  const byUser = new Map();
+
+  for (const e of events || []) {
+    if (e.kind !== 'attendance') continue;
+    const directUserId = String(e.userId || '');
+    const mappedUserId = attendanceNameToUserId?.[e.attendanceName || ''] || null;
+    const userId = directUserId && !/wantedspacebot|chroniclebot|bot/i.test(String(e.displayName || ''))
+      ? directUserId
+      : mappedUserId;
+    if (!userId) continue;
+
+    const row = byUser.get(userId) || { hasCheckIn: false, hasCheckOut: false, scheduledState: null, scheduledAt: null };
+    const atKey = kstDateKey(e.at);
+    if (atKey === todayKey) {
+      if (e.state === '출근') row.hasCheckIn = true;
+      if (e.state === '퇴근') row.hasCheckOut = true;
+    }
+
+    const schedKey = kstDateKey(e.scheduledFor);
+    if (schedKey === todayKey && ['휴가', '재택근무', '오전반차', '오후반차', '반차'].includes(String(e.state || ''))) {
+      const ts = new Date(e.at || 0).getTime();
+      const prevTs = new Date(row.scheduledAt || 0).getTime();
+      if (!row.scheduledAt || ts >= prevTs) {
+        row.scheduledState = e.state;
+        row.scheduledAt = e.at;
+      }
+    }
+
+    byUser.set(userId, row);
+  }
+
+  return users.map((u) => {
+    const facts = byUser.get(String(u.userId)) || { hasCheckIn: false, hasCheckOut: false, scheduledState: null };
+    const scheduled = facts.scheduledState;
+    let effective = u.attendance?.state || '업데이트';
+
+    if (scheduled === '재택근무') effective = '재택근무';
+    else if (scheduled === '휴가') effective = facts.hasCheckIn ? '출근' : '휴가';
+    else if (scheduled === '오전반차' || scheduled === '반차') effective = facts.hasCheckIn ? '출근' : '휴가';
+    else if (scheduled === '오후반차') effective = facts.hasCheckOut ? '휴가' : (facts.hasCheckIn ? '출근' : '안출근');
+    else if (facts.hasCheckOut) effective = '퇴근';
+    else if (facts.hasCheckIn) effective = '출근';
+    else effective = '안출근';
+
+    return {
+      ...u,
+      attendance: {
+        ...(u.attendance || {}),
+        scheduledState: scheduled || null,
+        state: effective,
+      },
+    };
+  });
 }
 
 function getTodayKstAttendanceByName(db) {
