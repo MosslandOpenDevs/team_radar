@@ -16,7 +16,8 @@
     "dev:status": "bash scripts/dev-status.sh",
     "dev:down": "bash scripts/dev-down.sh",
     "backfill:work": "node scripts/backfill-work-logs.js",
-    "db:migrate:pg": "node scripts/migrate-json-to-postgres.js"
+    "db:migrate:pg": "node scripts/migrate-json-to-postgres.js",
+    "backfill:attendance:schedule": "node scripts/backfill-attendance-schedule.js 30"
   },
   "keywords": [],
   "author": "",
