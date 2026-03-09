@@ -325,10 +325,21 @@
       function resolveMappingStatus(attendanceName = '', userId = '') {
         const byName = statusCache?.todayAttendanceByName || {};
         const users = statusCache?.users || [];
-        const a = byName[String(attendanceName).trim()] || null;
-        if (a?.state) return a;
+
+        // 매핑 탭은 "사용자 기준 최종 상태"를 우선 노출 (대시보드/맵 판정과 일치)
         const u = users.find((x) => String(x.userId) === String(userId));
-        if (u?.attendance?.state) return { state: u.attendance.state, at: u.attendance.at || u.updatedAt };
+        if (u?.attendance?.state) {
+          return {
+            state: u.attendance.state,
+            at: u.attendance.at || u.updatedAt,
+            source: 'user',
+          };
+        }
+
+        // 사용자 상태가 없을 때만 이름기준 fallback
+        const a = byName[String(attendanceName).trim()] || null;
+        if (a?.state) return { ...a, source: 'name' };
+
         return null;
       }
 
