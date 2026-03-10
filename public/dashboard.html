@@ -120,6 +120,7 @@
         <div class="actions">
           <button id="refreshNameBtn" class="btn">후보 재추출</button>
           <button id="refreshTodayAttendanceBtn" class="btn">오늘 근태 다시읽기</button>
+          <button id="reloadScheduledBtn" class="btn">스케줄 재수집 (7일)</button>
           <button id="addMapRowBtn" class="btn">행 추가</button>
           <button id="applyBtn" class="btn">매핑 Apply</button>
           <span class="muted" id="applyResult"></span>
@@ -226,9 +227,9 @@
           <canvas id="collisionCanvas" class="collision-canvas" width="640" height="480"></canvas>
           <div>
             <div class="collision-legend">
-              <span>⬛ base mask block</span>
-              <span>🟥 override block</span>
-              <span>🟦 override clear</span>
+              <span>🟥 blocked (mask)</span>
+              <span>🔴 blocked (added)</span>
+              <span>🟦 cleared (removed from mask)</span>
             </div>
             <div class="muted" style="margin:8px 0 6px;">2x2 map 구성 (1 2 / 3 4)</div>
             <div class="muted" style="margin:4px 0 6px;">편집 단위: 48x48 타일</div>
@@ -303,6 +304,8 @@
         baseImageSrc: '',
         overrides: { block: [], clear: [], meta: {} },
       };
+      let collisionPainting = false;
+      let collisionPaintMode = 'block';
       let statusRoomMapDirty = false;
 
       function li(k, v) { const node = document.createElement('li'); node.textContent = k + ': ' + v; return node; }
@@ -574,10 +577,9 @@
         collisionCanvas.height = Math.max(1, collisionState.height * tile);
         ctx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
 
+        // base map: draw at full opacity (no darkening)
         if (collisionState.baseImage && collisionState.baseImage.complete) {
           ctx.drawImage(collisionState.baseImage, 0, 0, collisionCanvas.width, collisionCanvas.height);
-          ctx.fillStyle = 'rgba(2,6,23,0.22)';
-          ctx.fillRect(0, 0, collisionCanvas.width, collisionCanvas.height);
         } else {
           ctx.fillStyle = '#0b1220';
           ctx.fillRect(0, 0, collisionCanvas.width, collisionCanvas.height);
@@ -590,18 +592,17 @@
         for (let y = 0; y < collisionState.height; y += 1) {
           for (let x = 0; x < collisionState.width; x += 1) {
             const key = `${x},${y}`;
-            if (maskSet.has(key)) {
-              // base collision from mask (initial load visible)
-              ctx.fillStyle = 'rgba(239,68,68,0.32)';
+            // effective blocked = (mask OR manual block) AND NOT cleared
+            const isEffective = (maskSet.has(key) || blockSet.has(key)) && !clearSet.has(key);
+            const isManualBlock = blockSet.has(key) && !maskSet.has(key);
+            const isCleared = clearSet.has(key);
+            if (isEffective) {
+              // mask-originated blocks: semi-opaque red (FE-aligned)
+              ctx.fillStyle = isManualBlock ? 'rgba(239,68,68,0.85)' : 'rgba(239,68,68,0.55)';
               ctx.fillRect(x * tile, y * tile, tile, tile);
             }
-            if (blockSet.has(key)) {
-              // manual add collision
-              ctx.fillStyle = 'rgba(239,68,68,0.72)';
-              ctx.fillRect(x * tile, y * tile, tile, tile);
-            }
-            if (clearSet.has(key)) {
-              // manual remove collision
+            if (isCleared) {
+              // explicitly cleared from mask: blue
               ctx.fillStyle = 'rgba(59,130,246,0.72)';
               ctx.fillRect(x * tile, y * tile, tile, tile);
             }
@@ -657,6 +658,24 @@
         try {
           await loadCollisionCatalog();
 
+          // fetch collision data in parallel
+          const [effectiveRes, ovRes] = await Promise.all([
+            fetch('/api/map/collision/effective' + mapQuery()),
+            fetch('/api/map/collision/overrides' + mapQuery()),
+          ]);
+          const [json, ovJson] = await Promise.all([effectiveRes.json(), ovRes.json()]);
+          if (!effectiveRes.ok || !json.ok) throw new Error(json.error || 'collision fetch failed');
+
+          collisionState.width = json.mask?.width || json.effective?.width || 0;
+          collisionState.height = json.mask?.height || json.effective?.height || 0;
+          collisionState.maskBlocked = new Set((json.mask?.blocked || []).map((p) => `${p.x},${p.y}`));
+          collisionState.overrides = ovJson.overrides || { block: [], clear: [], meta: {} };
+
+          // mask data is ready — draw immediately (shows mask on dark bg if image not yet loaded)
+          drawCollisionCanvas();
+          collisionResult.textContent = 'loaded';
+
+          // load base image separately; redraws once ready
           const entry = getCollisionMapEntry();
           const nextSrc = entry?.baseFile ? `/assets/custom-map/${entry.baseFile}` : '';
           if (nextSrc && collisionState.baseImageSrc !== nextSrc) {
@@ -666,19 +685,6 @@
             img.src = nextSrc;
             collisionState.baseImage = img;
           }
-
-          const res = await fetch('/api/map/collision/effective' + mapQuery());
-          const json = await res.json();
-          if (!res.ok || !json.ok) throw new Error(json.error || 'collision fetch failed');
-          collisionState.width = json.mask?.width || json.effective?.width || 0;
-          collisionState.height = json.mask?.height || json.effective?.height || 0;
-          collisionState.maskBlocked = new Set((json.mask?.blocked || []).map((p) => `${p.x},${p.y}`));
-
-          const ovRes = await fetch('/api/map/collision/overrides' + mapQuery());
-          const ovJson = await ovRes.json();
-          collisionState.overrides = ovJson.overrides || { block: [], clear: [], meta: {} };
-          drawCollisionCanvas();
-          collisionResult.textContent = 'loaded';
         } catch (err) {
           collisionResult.textContent = 'collision load 실패: ' + err.message;
         }
@@ -716,8 +722,8 @@
         try {
           const leaveDays = Math.max(1, Math.min(60, Number(leaveDaysInput?.value || 30)));
           const [statusRes, logsRes, membersRes, attendanceNamesRes, leaveRes, unclassifiedRes] = await Promise.all([
-            fetch('/api/team/status'),
-            fetch('/api/team/logs?limit=500'),
+            fetch('/api/team/status?hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
+            fetch('/api/team/logs?limit=500&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
             fetch('/api/discord/members'),
             fetch('/api/attendance/names'),
             fetch('/api/team/leave?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
@@ -789,6 +795,20 @@
       applyCharacterBtn.addEventListener('click', applyCharacterMappings);
       refreshNameBtn.addEventListener('click', refreshAttendanceCandidates);
       refreshTodayAttendanceBtn?.addEventListener('click', refreshTodayAttendance);
+      document.getElementById('reloadScheduledBtn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('reloadScheduledBtn');
+        btn.disabled = true;
+        applyResult.textContent = '스케줄 재수집 중 (7일)...';
+        try {
+          const res = await fetch('/api/attendance/reload-scheduled', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: 7 }) });
+          const json = await res.json();
+          if (!res.ok || !json.ok) throw new Error(json.error || 'failed');
+          applyResult.textContent = `스케줄 재수집 완료 (+${json.imported || 0}건, ${json.days}일치)`;
+          await refresh();
+        } catch (err) {
+          applyResult.textContent = '스케줄 재수집 실패: ' + err.message;
+        } finally { btn.disabled = false; }
+      });
       saveStatusRoomMapBtn?.addEventListener('click', saveStatusRoomMapping);
       [slotWorking, slotOffwork, slotRemote, slotVacation].forEach((el) => {
         el?.addEventListener('change', () => {
@@ -807,30 +827,42 @@
       leaveDaysInput?.addEventListener('change', refresh);
 
       collisionCanvas?.addEventListener('contextmenu', (e) => e.preventDefault());
-      collisionCanvas?.addEventListener('mousemove', (e) => {
-        if (!collisionState.width || !collisionState.height || !collisionHover) return;
+      function getCanvasTile(e) {
         const rect = collisionCanvas.getBoundingClientRect();
-        const tile = collisionCanvas.width / collisionState.width;
-        const x = Math.floor((e.clientX - rect.left) / tile);
-        const y = Math.floor((e.clientY - rect.top) / tile);
-        if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) {
-          collisionHover.textContent = '';
-          return;
-        }
-        collisionHover.textContent = `hover tile: (${x}, ${y}) | world px: (${x * 48}~${x * 48 + 47}, ${y * 48}~${y * 48 + 47})`;
-      });
-      collisionCanvas?.addEventListener('mouseleave', () => {
-        if (collisionHover) collisionHover.textContent = '';
-      });
+        const scaleX = collisionCanvas.width / rect.width;
+        const scaleY = collisionCanvas.height / rect.height;
+        const x = Math.floor((e.clientX - rect.left) * scaleX / 48);
+        const y = Math.floor((e.clientY - rect.top) * scaleY / 48);
+        return { x, y };
+      }
+
       collisionCanvas?.addEventListener('mousedown', (e) => {
         if (!collisionState.width || !collisionState.height) return;
-        const rect = collisionCanvas.getBoundingClientRect();
-        const tile = collisionCanvas.width / collisionState.width;
-        const x = Math.floor((e.clientX - rect.left) / tile);
-        const y = Math.floor((e.clientY - rect.top) / tile);
+        e.preventDefault();
+        const { x, y } = getCanvasTile(e);
         if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) return;
-        if (e.button === 2) applyCollisionPaint(x, y, 'clear');
-        else applyCollisionPaint(x, y, 'block');
+        collisionPainting = true;
+        collisionPaintMode = e.button === 2 ? 'clear' : 'block';
+        applyCollisionPaint(x, y, collisionPaintMode);
+      });
+      collisionCanvas?.addEventListener('mousemove', (e) => {
+        if (!collisionState.width || !collisionState.height) return;
+        const { x, y } = getCanvasTile(e);
+        if (collisionHover) {
+          if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) {
+            collisionHover.textContent = '';
+          } else {
+            collisionHover.textContent = `tile: (${x}, ${y}) | world px: (${x * 48}~${x * 48 + 47}, ${y * 48}~${y * 48 + 47})`;
+          }
+        }
+        if (!collisionPainting) return;
+        if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) return;
+        applyCollisionPaint(x, y, collisionPaintMode);
+      });
+      collisionCanvas?.addEventListener('mouseup', () => { collisionPainting = false; });
+      collisionCanvas?.addEventListener('mouseleave', () => {
+        collisionPainting = false;
+        if (collisionHover) collisionHover.textContent = '';
       });
 
       collisionMapSelect?.addEventListener('change', () => {

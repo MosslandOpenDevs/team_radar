@@ -21,6 +21,12 @@ const ATTENDANCE_BACKFILL_DAYS_KST = Math.max(1, Number(process.env.ATTENDANCE_B
 const STARTUP_WORK_BACKFILL = String(process.env.STARTUP_WORK_BACKFILL || 'true').toLowerCase() !== 'false';
 const WORK_BACKFILL_DAYS = Math.max(1, Number(process.env.WORK_BACKFILL_DAYS || 7));
 
+// 근태 채널에서 처리할 봇 ID 및 허용 상태
+const WANTEDSPACE_BOT_ID = process.env.WANTEDSPACE_BOT_ID || ''; // wantedspaceBotV2 - 출근/퇴근
+const CHRONICLE_BOT_ID = process.env.CHRONICLE_BOT_ID || '';      // ChronicleBot - 연차/반차/재택근무
+const WANTEDSPACE_STATES = new Set(['출근', '퇴근', '지각', '복귀', '자리비움']);
+const CHRONICLE_SCHEDULE_STATES = new Set(['재택근무', '연차', '반차', '오전반차', '오후반차', '휴가']);
+
 
 if (!BOT_TOKEN) {
   console.error('[ERROR] DISCORD_BOT_TOKEN is required in .env');
@@ -96,8 +102,14 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.MessageCreate, async (message) => {
   const isAttendanceChannel = attendanceSet.has(message.channelId);
 
-  // 근태 채널은 bot 메시지도 수집(예: wantedspaceBotV2)
-  if (message.author.bot && !isAttendanceChannel) return;
+  // 근태 채널: wantedspaceBotV2 / ChronicleBot 만 처리, 그 외 전부 무시
+  if (isAttendanceChannel) {
+    const aid = message.author.id;
+    if (aid !== WANTEDSPACE_BOT_ID && aid !== CHRONICLE_BOT_ID) return;
+  } else {
+    // 업무 채널: 봇 메시지 무시
+    if (message.author.bot) return;
+  }
 
   if (shouldHandleCommand(message)) {
     await handleCommand(message);
@@ -114,11 +126,44 @@ client.on(Events.MessageCreate, async (message) => {
   user.displayName = displayName;
   user.isBot = !!message.author?.bot;
 
-  if (attendanceSet.has(message.channelId)) {
+  if (isAttendanceChannel) {
+    const authorId = message.author.id;
+    const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+    const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+
     const rawText = getAttendanceSourceText(message);
     const state = parseAttendanceState(rawText);
-    const attendanceName = extractAttendanceName(rawText);
     const scheduleInfo = extractScheduleInfo(rawText);
+
+    // ChronicleBot cancelled: 스케줄 취소 이벤트 저장 후 캐시 제거
+    if (isChronicleBot && state === 'cancelled') {
+      const attendanceName = extractAttendanceName(rawText);
+      if (attendanceName) {
+        const eventRow = {
+          userId, displayName, kind: 'attendance', state: 'cancelled',
+          attendanceName, summary: rawText,
+          scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText,
+          channelId: message.channelId, messageId: message.id,
+          at: message.createdAt.toISOString(),
+        };
+        appendEvent(eventRow);
+        delete db.data.attendanceByName[attendanceName];
+        if (pgStore.pgEnabled) {
+          try { await pgStore.insertEvent(eventRow); } catch (err) { console.warn('[CANCEL]', err.message); }
+        }
+        touchMeta(nowIso);
+        db.write();
+      }
+      return;
+    }
+
+    // 봇별 허용 상태 필터
+    const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                  : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                  : false;
+    if (!allowed) return;
+
+    const attendanceName = extractAttendanceName(rawText);
 
     user.attendance = {
       state,
@@ -244,12 +289,40 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
         }
         if (msg.createdTimestamp >= endUtc.getTime()) continue;
 
+        // 근태 채널: 지정 봇 메시지만 처리
+        const authorId = msg.author.id;
+        const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+        const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+        if (!isWantedSpaceBot && !isChronicleBot) continue;
+
         const userId = msg.author.id;
         const displayName = msg.member?.displayName || msg.author.globalName || msg.author.username;
         const rawText = getAttendanceSourceText(msg);
         const state = parseAttendanceState(rawText);
-        const attendanceName = extractAttendanceName(rawText);
         const scheduleInfo = extractScheduleInfo(rawText);
+
+        // ChronicleBot cancelled
+        if (isChronicleBot && state === 'cancelled') {
+          const attendanceName = extractAttendanceName(rawText);
+          if (attendanceName && !db.data.events.some((e) => e.messageId === msg.id)) {
+            db.data.events.push({
+              userId, displayName, kind: 'attendance', state: 'cancelled',
+              attendanceName, summary: rawText,
+              scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText,
+              channelId: msg.channelId, messageId: msg.id, at: msg.createdAt.toISOString(),
+            });
+            imported += 1;
+          }
+          continue;
+        }
+
+        // 봇별 허용 상태 필터
+        const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                      : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                      : false;
+        if (!allowed) continue;
+
+        const attendanceName = extractAttendanceName(rawText);
 
         const user = getOrCreateUser(userId, displayName);
         user.displayName = displayName;
@@ -627,6 +700,8 @@ function parseAttendanceState(text) {
   const src = String(text || '');
   const t = src.toLowerCase();
 
+  if (/cancelled|취소됨/.test(t)) return 'cancelled';
+
   // 우선순위: 문장형 고정 패턴 (예: "... 출근했습니다.", "... 퇴근했습니다.")
   if (/출근\s*했습니다\.?/.test(src)) return '출근';
   if (/퇴근\s*했습니다\.?/.test(src)) return '퇴근';
@@ -692,8 +767,24 @@ function extractScheduleInfo(text) {
 
   let scheduledFor = null;
   if (dateRaw) {
-    const parsed = new Date(dateRaw);
-    if (!Number.isNaN(parsed.getTime())) scheduledFor = parsed.toISOString();
+    // Discord 유닉스 타임스탬프 포맷: <t:1773187200:F>
+    const discordTs = dateRaw.match(/<t:(\d+)(?::[^>]*)?>/) || t.match(/<t:(\d+)(?::[^>]*)?>/);
+    if (discordTs) {
+      scheduledFor = new Date(Number(discordTs[1]) * 1000).toISOString();
+    } else {
+      // 영어 날짜 시도 (e.g. "Tuesday, March 10, 2026")
+      const parsed = new Date(dateRaw);
+      if (!Number.isNaN(parsed.getTime())) {
+        scheduledFor = parsed.toISOString();
+      } else {
+        // 한국어 날짜 파싱 (e.g. "2026년 3월 10일 화요일 오전 9:00")
+        const korMatch = dateRaw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+        if (korMatch) {
+          const [, y, m, d] = korMatch;
+          scheduledFor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).toISOString();
+        }
+      }
+    }
   }
 
   return { scheduledFor, durationText };

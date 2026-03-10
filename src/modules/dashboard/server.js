@@ -15,11 +15,15 @@ const {
 const PORT = Number(process.env.DASHBOARD_PORT || 3100);
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
-const ATTENDANCE_CHANNEL_IDS = String(process.env.ATTENDANCE_CHANNEL_IDS || '')
-  .split(',')
-  .map((v) => v.trim())
-  .filter(Boolean);
+const parseIds = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
+const ATTENDANCE_CHANNEL_IDS = parseIds(process.env.ATTENDANCE_CHANNEL_IDS);
 const ATTENDANCE_NAME_LOOKBACK_DAYS = Math.max(1, Number(process.env.ATTENDANCE_NAME_LOOKBACK_DAYS || 5));
+
+// 근태 채널에서 처리할 봇 ID 및 허용 상태
+const WANTEDSPACE_BOT_ID = process.env.WANTEDSPACE_BOT_ID || ''; // wantedspaceBotV2 - 출근/퇴근
+const CHRONICLE_BOT_ID = process.env.CHRONICLE_BOT_ID || '';      // ChronicleBot - 연차/반차/재택근무
+const WANTEDSPACE_STATES = new Set(['출근', '퇴근', '지각', '복귀', '자리비움']);
+const CHRONICLE_SCHEDULE_STATES = new Set(['재택근무', '연차', '반차', '오전반차', '오후반차', '휴가']);
 
 const app = express();
 app.use((req, res, next) => {
@@ -431,8 +435,33 @@ app.post('/api/attendance/reload-today', async (req, res) => {
               done = true;
               continue;
             }
+
+            // 지정 봇 메시지만 처리
+            const authorId = msg.author?.id;
+            const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+            const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+            if (!isWantedSpaceBot && !isChronicleBot) continue;
+
             const rawText = getMessageText(msg);
             const state = parseAttendanceState(rawText);
+            const scheduleInfo = extractScheduleInfo(rawText);
+
+            // ChronicleBot cancelled
+            if (isChronicleBot && state === 'cancelled') {
+              const attendanceName = extractAttendanceName(rawText);
+              if (attendanceName) {
+                await pgStore.insertEvent({ userId: String(msg.author?.id || ''), displayName: msg.member?.displayName || msg.author?.username || attendanceName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                imported += 1;
+              }
+              continue;
+            }
+
+            // 봇별 허용 상태 필터
+            const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                          : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                          : false;
+            if (!allowed) continue;
+
             const attendanceName = extractAttendanceName(rawText);
             if (!attendanceName) continue;
 
@@ -443,6 +472,8 @@ app.post('/api/attendance/reload-today', async (req, res) => {
                 state,
                 attendanceName,
                 rawText,
+                scheduledFor: scheduleInfo.scheduledFor,
+                durationText: scheduleInfo.durationText,
                 channelId,
                 messageId: msg.id,
                 at: msg.createdAt.toISOString(),
@@ -460,6 +491,8 @@ app.post('/api/attendance/reload-today', async (req, res) => {
               state,
               attendanceName,
               summary: rawText,
+              scheduledFor: scheduleInfo.scheduledFor,
+              durationText: scheduleInfo.durationText,
               channelId,
               messageId: msg.id,
               at: msg.createdAt.toISOString(),
@@ -496,8 +529,35 @@ app.post('/api/attendance/reload-today', async (req, res) => {
             continue;
           }
 
+          // 지정 봇 메시지만 처리
+          const authorId = msg.author?.id;
+          const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+          const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+          if (!isWantedSpaceBot && !isChronicleBot) continue;
+
           const rawText = getMessageText(msg);
           const state = parseAttendanceState(rawText);
+          const scheduleInfo = extractScheduleInfo(rawText);
+
+          // ChronicleBot cancelled
+          if (isChronicleBot && state === 'cancelled') {
+            const attendanceName = extractAttendanceName(rawText);
+            if (attendanceName && !seenMessageIds.has(String(msg.id))) {
+              const userId = String(msg.author?.id || '');
+              const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
+              db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+              seenMessageIds.add(String(msg.id));
+              imported += 1;
+            }
+            continue;
+          }
+
+          // 봇별 허용 상태 필터
+          const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                        : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                        : false;
+          if (!allowed) continue;
+
           const attendanceName = extractAttendanceName(rawText);
           if (!attendanceName) continue;
 
@@ -513,13 +573,13 @@ app.post('/api/attendance/reload-today', async (req, res) => {
 
           user.displayName = displayName;
           user.isBot = !!msg.author?.bot;
-          user.attendance = { state, attendanceName, rawText, channelId, messageId: msg.id, at };
+          user.attendance = { state, attendanceName, rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at };
           user.updatedAt = at;
 
-          db.attendanceByName[attendanceName] = { state, rawText, channelId, messageId: msg.id, at };
+          db.attendanceByName[attendanceName] = { state, rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at };
 
           if (!seenMessageIds.has(String(msg.id))) {
-            db.events.push({ userId, displayName, kind: 'attendance', state, attendanceName, summary: rawText, channelId, messageId: msg.id, at });
+            db.events.push({ userId, displayName, kind: 'attendance', state, attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at });
             seenMessageIds.add(String(msg.id));
             imported += 1;
           }
@@ -537,6 +597,170 @@ app.post('/api/attendance/reload-today', async (req, res) => {
 
     await refreshCaches({ includeMembers: false });
     return res.json({ ok: true, imported, mode: 'json' });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 과거 N일치 근태채널 메시지를 소급 수집 (크로니클봇 스케줄 이벤트 포함)
+app.post('/api/attendance/reload-scheduled', async (req, res) => {
+  try {
+    if (!discordClient?.isReady() || !ATTENDANCE_CHANNEL_IDS.length) {
+      return res.status(400).json({ ok: false, error: 'discord client not ready or attendance channels not configured' });
+    }
+
+    const days = Math.max(1, Math.min(30, Number(req.body?.days || 7)));
+    const startUtc = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    let imported = 0;
+
+    if (pgStore.pgEnabled) {
+      for (const channelId of ATTENDANCE_CHANNEL_IDS) {
+        const ch = await discordClient.channels.fetch(channelId).catch(() => null);
+        if (!ch || !ch.isTextBased()) continue;
+
+        let before;
+        let done = false;
+        while (!done) {
+          const batch = await ch.messages.fetch({ limit: 100, before }).catch(() => null);
+          if (!batch || batch.size === 0) break;
+
+          const rows = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+          for (const msg of rows) {
+            if (msg.createdTimestamp < startUtc.getTime()) { done = true; continue; }
+
+            // 지정 봇 메시지만 처리
+            const authorId = msg.author?.id;
+            const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+            const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+            if (!isWantedSpaceBot && !isChronicleBot) continue;
+
+            const rawText = getMessageText(msg);
+            const state = parseAttendanceState(rawText);
+            const scheduleInfo = extractScheduleInfo(rawText);
+
+            // ChronicleBot cancelled
+            if (isChronicleBot && state === 'cancelled') {
+              const attendanceName = extractAttendanceName(rawText);
+              if (attendanceName) {
+                await pgStore.insertEvent({ userId: String(msg.author?.id || ''), displayName: msg.member?.displayName || msg.author?.username || attendanceName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                imported += 1;
+              }
+              continue;
+            }
+
+            // 봇별 허용 상태 필터
+            const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                          : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                          : false;
+            if (!allowed) continue;
+
+            const attendanceName = extractAttendanceName(rawText);
+            if (!attendanceName) continue;
+
+            const user = {
+              userId: String(msg.author?.id || ''),
+              displayName: msg.member?.displayName || msg.author?.username || attendanceName,
+              attendance: { state, attendanceName, rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() },
+              work: null,
+            };
+            await pgStore.upsertUser(user.userId, user.displayName, msg.author?.username || null, msg.author?.globalName || null);
+            await pgStore.upsertCurrentStatus(user);
+            await pgStore.upsertAttendanceByName(attendanceName, user.attendance);
+            await pgStore.insertEvent({ userId: user.userId, displayName: user.displayName, kind: 'attendance', state, attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+            imported += 1;
+          }
+
+          before = rows[0]?.id;
+          if (!before) break;
+        }
+      }
+      await refreshCaches({ includeMembers: false });
+      return res.json({ ok: true, imported, days, mode: 'postgres' });
+    }
+
+    const db = readDb();
+    const seenMessageIds = new Set((db.events || []).map((e) => String(e.messageId || '')).filter(Boolean));
+    db.attendanceByName ||= {};
+
+    for (const channelId of ATTENDANCE_CHANNEL_IDS) {
+      const ch = await discordClient.channels.fetch(channelId).catch(() => null);
+      if (!ch || !ch.isTextBased()) continue;
+
+      let before;
+      let done = false;
+      while (!done) {
+        const batch = await ch.messages.fetch({ limit: 100, before }).catch(() => null);
+        if (!batch || batch.size === 0) break;
+
+        const rows = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        for (const msg of rows) {
+          if (msg.createdTimestamp < startUtc.getTime()) { done = true; continue; }
+
+          // 지정 봇 메시지만 처리
+          const authorId = msg.author?.id;
+          const isWantedSpaceBot = authorId === WANTEDSPACE_BOT_ID;
+          const isChronicleBot = authorId === CHRONICLE_BOT_ID;
+          if (!isWantedSpaceBot && !isChronicleBot) continue;
+
+          const rawText = getMessageText(msg);
+          const state = parseAttendanceState(rawText);
+          const scheduleInfo = extractScheduleInfo(rawText);
+
+          // ChronicleBot cancelled
+          if (isChronicleBot && state === 'cancelled') {
+            const attendanceName = extractAttendanceName(rawText);
+            if (attendanceName && !seenMessageIds.has(String(msg.id))) {
+              const userId = String(msg.author?.id || '');
+              const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
+              db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+              seenMessageIds.add(String(msg.id));
+              imported += 1;
+            }
+            continue;
+          }
+
+          // 봇별 허용 상태 필터
+          const allowed = isWantedSpaceBot ? WANTEDSPACE_STATES.has(state)
+                        : isChronicleBot  ? CHRONICLE_SCHEDULE_STATES.has(state)
+                        : false;
+          if (!allowed) continue;
+
+          const attendanceName = extractAttendanceName(rawText);
+          if (!attendanceName) continue;
+
+          const userId = String(msg.author?.id || '');
+          const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
+          const at = msg.createdAt.toISOString();
+
+          let user = (db.users || []).find((u) => String(u.userId) === userId);
+          if (!user) {
+            user = { userId, displayName, isBot: !!msg.author?.bot, attendance: null, work: null, workLogs: [], updatedAt: at };
+            db.users.push(user);
+          }
+          user.displayName = displayName;
+          user.isBot = !!msg.author?.bot;
+          user.attendance = { state, attendanceName, rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at };
+          user.updatedAt = at;
+          db.attendanceByName[attendanceName] = { state, rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at };
+
+          if (!seenMessageIds.has(String(msg.id))) {
+            db.events.push({ userId, displayName, kind: 'attendance', state, attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at });
+            seenMessageIds.add(String(msg.id));
+            imported += 1;
+          }
+        }
+
+        before = rows[0]?.id;
+        if (!before) break;
+      }
+    }
+
+    db.events = (db.events || []).slice(-5000);
+    db.meta ||= {};
+    db.meta.updatedAt = new Date().toISOString();
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    await refreshCaches({ includeMembers: false });
+    return res.json({ ok: true, imported, days, mode: 'json' });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
@@ -806,18 +1030,38 @@ function readCollisionMaskTiles(mapKey = 'base-map') {
   }
   const buf = fs.readFileSync(collisionPath);
   const png = PNG.sync.read(buf);
+
+  // Each collision tile = 48x48 pixels in the source PNG.
+  // Return tile-indexed coordinates so the canvas stays at a sane size.
+  const TILE = 48;
+  const tilesW = Math.ceil(png.width / TILE);
+  const tilesH = Math.ceil(png.height / TILE);
   const blocked = [];
-  for (let y = 0; y < png.height; y += 1) {
-    for (let x = 0; x < png.width; x += 1) {
-      const idx = (png.width * y + x) << 2;
-      const r = png.data[idx];
-      const g = png.data[idx + 1];
-      const b = png.data[idx + 2];
-      const a = png.data[idx + 3];
-      if (a > 0 && (r + g + b) < 700) blocked.push({ x, y });
+
+  for (let ty = 0; ty < tilesH; ty += 1) {
+    for (let tx = 0; tx < tilesW; tx += 1) {
+      // Check if any pixel in this 48x48 block is blocked
+      // (a >= 8 && nonBlack r+g+b > 36, matching FE custom map criteria)
+      let isBlocked = false;
+      outer: for (let dy = 0; dy < TILE && !isBlocked; dy += 1) {
+        const py = ty * TILE + dy;
+        if (py >= png.height) break;
+        for (let dx = 0; dx < TILE; dx += 1) {
+          const px = tx * TILE + dx;
+          if (px >= png.width) break;
+          const idx = (png.width * py + px) << 2;
+          const r = png.data[idx];
+          const g = png.data[idx + 1];
+          const b = png.data[idx + 2];
+          const a = png.data[idx + 3];
+          if (a >= 8 && (r + g + b) > 36) { isBlocked = true; break outer; }
+        }
+      }
+      if (isBlocked) blocked.push({ x: tx, y: ty });
     }
   }
-  return { width: png.width, height: png.height, blocked };
+
+  return { width: tilesW, height: tilesH, blocked };
 }
 
 function buildEffectiveCollision(mask, overrides) {
@@ -919,6 +1163,7 @@ app.get('/', (req, res) => {
 
 function isBotLikeUser(u = {}) {
   if (u.isBot === true) return true;
+  if (u.userId === WANTEDSPACE_BOT_ID || u.userId === CHRONICLE_BOT_ID) return true;
   const s = `${u.displayName || ''} ${u.username || ''} ${u.globalName || ''}`.toLowerCase();
   return /bot|wantedspacebot|chroniclebot|봇/.test(s);
 }
@@ -958,20 +1203,49 @@ function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserI
     if (e.kind !== 'attendance') continue;
     const directUserId = String(e.userId || '');
     const mappedUserId = attendanceNameToUserId?.[e.attendanceName || ''] || null;
-    const userId = directUserId && !/wantedspacebot|chroniclebot|bot/i.test(String(e.displayName || ''))
-      ? directUserId
-      : mappedUserId;
+    // bot 메시지(wantedspaceBotV2, ChronicleBot)는 attendanceName → userId 매핑 사용
+    const isBotProxy = directUserId === WANTEDSPACE_BOT_ID || directUserId === CHRONICLE_BOT_ID;
+    const userId = (!isBotProxy && directUserId) ? directUserId : mappedUserId;
     if (!userId) continue;
 
-    const row = byUser.get(userId) || { hasCheckIn: false, hasCheckOut: false, scheduledState: null, scheduledAt: null };
+    const row = byUser.get(userId) || {
+      hasCheckIn: false,
+      hasCheckOut: false,
+      scheduledState: null,
+      scheduledAt: null,
+      hasRemoteSchedule: false,
+      lastEventAt: null,
+    };
     const atKey = kstDateKey(e.at);
     if (atKey === todayKey) {
       if (e.state === '출근') row.hasCheckIn = true;
       if (e.state === '퇴근') row.hasCheckOut = true;
     }
 
+    // 가장 최근 이벤트 시간 추적 (bot 프록시 사용자도 타임스탬프 표시용)
+    if (e.at && new Date(e.at).getTime() > new Date(row.lastEventAt || 0).getTime()) {
+      row.lastEventAt = e.at;
+    }
+
     const schedKey = kstDateKey(e.scheduledFor);
-    if (schedKey === todayKey && ['휴가', '재택근무', '오전반차', '오후반차', '반차'].includes(String(e.state || ''))) {
+    const LEAVE_STATES = ['휴가', '오전반차', '오후반차', '반차'];
+    // scheduledFor가 오늘이거나, scheduledFor 없이 당일 올린 공지도 오늘 일정으로 처리
+    const isScheduledForToday = schedKey === todayKey
+      || (!schedKey && atKey === todayKey && [...LEAVE_STATES, '재택근무', 'cancelled'].includes(String(e.state || '')));
+
+    // cancelled: 해당 날짜 스케줄 초기화 (이벤트 시간순 처리되므로 취소가 원본 이후에 오면 정확)
+    if (isScheduledForToday && e.state === 'cancelled') {
+      row.hasRemoteSchedule = false;
+      row.scheduledState = null;
+      row.scheduledAt = null;
+    }
+
+    // 재택근무 일정은 별도 플래그로 추적 (출근 이벤트와 조합해서 판정)
+    if (isScheduledForToday && e.state === '재택근무') {
+      row.hasRemoteSchedule = true;
+    }
+    // 휴가/반차 계열은 scheduledState로 추적 (최신 이벤트 우선)
+    if (isScheduledForToday && LEAVE_STATES.includes(String(e.state || ''))) {
       const ts = new Date(e.at || 0).getTime();
       const prevTs = new Date(row.scheduledAt || 0).getTime();
       if (!row.scheduledAt || ts >= prevTs) {
@@ -984,17 +1258,35 @@ function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserI
   }
 
   return users.map((u) => {
-    const facts = byUser.get(String(u.userId)) || { hasCheckIn: false, hasCheckOut: false, scheduledState: null };
-    const scheduled = facts.scheduledState;
-    let effective = u.attendance?.state || '업데이트';
+    const facts = byUser.get(String(u.userId)) || {
+      hasCheckIn: false,
+      hasCheckOut: false,
+      scheduledState: null,
+      hasRemoteSchedule: false,
+    };
+    const { scheduledState: scheduled, hasCheckIn, hasCheckOut, hasRemoteSchedule } = facts;
+    let effective;
 
-    if (scheduled === '재택근무') effective = facts.hasCheckIn ? '재택근무' : '안출근';
-    else if (scheduled === '휴가') effective = facts.hasCheckIn ? '출근' : '휴가';
-    else if (scheduled === '오전반차' || scheduled === '반차') effective = facts.hasCheckIn ? '출근' : '휴가';
-    else if (scheduled === '오후반차') effective = facts.hasCheckOut ? '휴가' : (facts.hasCheckIn ? '출근' : '안출근');
-    else if (facts.hasCheckOut) effective = '퇴근';
-    else if (facts.hasCheckIn) effective = '출근';
-    else effective = '안출근';
+    if (scheduled === '휴가') {
+      // 연차/휴가: 스케줄 우선 → 출근 기록이 있어도 휴가
+      effective = '휴가';
+    } else if (scheduled === '오전반차' || scheduled === '반차') {
+      // 오전반차/반차: 스케줄 우선 → 휴가
+      effective = '휴가';
+    } else if (scheduled === '오후반차') {
+      // 오후반차: 퇴근 이벤트 있으면 휴가, 출근 이벤트 있으면 출근 유지, 둘 다 없으면 안출근
+      if (hasCheckOut) effective = '휴가';
+      else if (hasCheckIn) effective = hasRemoteSchedule ? '재택근무' : '출근';
+      else effective = '안출근';
+    } else if (hasCheckOut) {
+      // 퇴근 이벤트: 안출근으로 처리
+      effective = '안출근';
+    } else if (hasCheckIn) {
+      // 출근 이벤트: 재택 일정 있으면 재택근무, 없으면 출근(사무실)
+      effective = hasRemoteSchedule ? '재택근무' : '출근';
+    } else {
+      effective = '안출근';
+    }
 
     return {
       ...u,
@@ -1002,6 +1294,8 @@ function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserI
         ...(u.attendance || {}),
         scheduledState: scheduled || null,
         state: effective,
+        // bot 프록시 경유 사용자도 날짜 표시 가능하도록 최근 이벤트 시간으로 보완
+        at: (u.attendance?.at) || facts.lastEventAt || u.updatedAt || null,
       },
     };
   });
@@ -1042,6 +1336,7 @@ function getTodayKstAttendanceByName(db) {
 function parseAttendanceState(text) {
   const t = String(text || '').trim();
   if (!t) return '업데이트';
+  if (/cancelled|취소됨/i.test(t)) return 'cancelled';
   if (/출근/.test(t)) return '출근';
   if (/퇴근/.test(t)) return '퇴근';
   if (/지각/.test(t)) return '지각';
@@ -1053,6 +1348,41 @@ function parseAttendanceState(text) {
   if (/연차|휴가/.test(t)) return '휴가';
   if (/외근|자리비움/.test(t)) return '자리비움';
   return '업데이트';
+}
+
+function extractScheduleInfo(text) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return { scheduledFor: null, durationText: null };
+
+  const dateMatch = t.match(/Scheduled\s*for\s*([^\n]+?)(?:\s+Duration\b|$)/i);
+  const durationMatch = t.match(/Duration\s*([^\n]+)$/i);
+
+  const dateRaw = (dateMatch?.[1] || '').replace(/\s+/g, ' ').trim();
+  const durationText = (durationMatch?.[1] || '').replace(/\s+/g, ' ').trim() || null;
+
+  let scheduledFor = null;
+  if (dateRaw) {
+    // Discord 유닉스 타임스탬프 포맷: <t:1773187200:F>
+    const discordTs = dateRaw.match(/<t:(\d+)(?::[^>]*)?>/) || t.match(/<t:(\d+)(?::[^>]*)?>/);
+    if (discordTs) {
+      scheduledFor = new Date(Number(discordTs[1]) * 1000).toISOString();
+    } else {
+      // 영어 날짜 시도 (e.g. "Tuesday, March 10, 2026")
+      const parsed = new Date(dateRaw);
+      if (!Number.isNaN(parsed.getTime())) {
+        scheduledFor = parsed.toISOString();
+      } else {
+        // 한국어 날짜 파싱 (e.g. "2026년 3월 10일 화요일 오전 9:00")
+        const korMatch = dateRaw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
+        if (korMatch) {
+          const [, y, m, d] = korMatch;
+          scheduledFor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).toISOString();
+        }
+      }
+    }
+  }
+
+  return { scheduledFor, durationText };
 }
 
 function getMessageText(msg) {

@@ -75,7 +75,10 @@ async function insertEvent(event) {
   await q(
     `insert into events(message_id, user_id, display_name, kind, state, summary, attendance_name, channel_id, occurred_at, raw_payload)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-     on conflict do nothing`,
+     on conflict (message_id) where message_id is not null do update set
+       attendance_name = coalesce(excluded.attendance_name, events.attendance_name),
+       summary = coalesce(excluded.summary, events.summary),
+       raw_payload = coalesce(excluded.raw_payload, events.raw_payload)`,
     [
       event.messageId || null,
       event.userId || null,
