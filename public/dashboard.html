@@ -575,21 +575,24 @@
           for (let x = 0; x < collisionState.width; x += 1) {
             const key = `${x},${y}`;
             if (maskSet.has(key)) {
-              ctx.fillStyle = '#2a2a2a';
+              // base collision from mask (initial load visible)
+              ctx.fillStyle = 'rgba(239,68,68,0.32)';
               ctx.fillRect(x * tile, y * tile, tile, tile);
             }
             if (blockSet.has(key)) {
-              ctx.fillStyle = '#ef4444';
+              // manual add collision
+              ctx.fillStyle = 'rgba(239,68,68,0.72)';
               ctx.fillRect(x * tile, y * tile, tile, tile);
             }
             if (clearSet.has(key)) {
-              ctx.fillStyle = '#3b82f6';
+              // manual remove collision
+              ctx.fillStyle = 'rgba(59,130,246,0.72)';
               ctx.fillRect(x * tile, y * tile, tile, tile);
             }
           }
         }
 
-        ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+        ctx.strokeStyle = 'rgba(148,163,184,0.45)';
         for (let x = 0; x <= collisionState.width; x += 1) {
           ctx.beginPath();
           ctx.moveTo(x * tile + 0.5, 0);
@@ -617,11 +620,14 @@
             if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) continue;
             const key = `${x},${y}`;
             if (mode === 'block') {
-              if (blockSet.has(key)) blockSet.delete(key); else blockSet.add(key);
+              // left click: always add collision
+              blockSet.add(key);
               clearSet.delete(key);
             } else if (mode === 'clear') {
-              if (clearSet.has(key)) clearSet.delete(key); else clearSet.add(key);
+              // right click: always remove collision
               blockSet.delete(key);
+              if (collisionState.maskBlocked.has(key)) clearSet.add(key);
+              else clearSet.delete(key);
             }
           }
         }
