@@ -299,6 +299,8 @@
         width: 0,
         height: 0,
         maskBlocked: new Set(),
+        baseImage: null,
+        baseImageSrc: '',
         overrides: { block: [], clear: [], meta: {} },
       };
       let statusRoomMapDirty = false;
@@ -521,6 +523,10 @@
         return `?mapKey=${key}`;
       }
 
+      function getCollisionMapEntry() {
+        return (collisionState.catalog || []).find((m) => m.key === collisionState.mapKey) || null;
+      }
+
       function renderCollisionCatalog() {
         const maps = collisionState.catalog || [];
         if (collisionMapSelect) {
@@ -566,6 +572,15 @@
         collisionCanvas.width = Math.max(1, collisionState.width * tile);
         collisionCanvas.height = Math.max(1, collisionState.height * tile);
         ctx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+
+        if (collisionState.baseImage && collisionState.baseImage.complete) {
+          ctx.drawImage(collisionState.baseImage, 0, 0, collisionCanvas.width, collisionCanvas.height);
+          ctx.fillStyle = 'rgba(2,6,23,0.22)';
+          ctx.fillRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+        } else {
+          ctx.fillStyle = '#0b1220';
+          ctx.fillRect(0, 0, collisionCanvas.width, collisionCanvas.height);
+        }
 
         const blockSet = toPointSet(collisionState.overrides.block);
         const clearSet = toPointSet(collisionState.overrides.clear);
@@ -640,6 +655,17 @@
       async function loadCollisionEditor() {
         try {
           await loadCollisionCatalog();
+
+          const entry = getCollisionMapEntry();
+          const nextSrc = entry?.baseFile ? `/assets/custom-map/${entry.baseFile}` : '';
+          if (nextSrc && collisionState.baseImageSrc !== nextSrc) {
+            collisionState.baseImageSrc = nextSrc;
+            const img = new Image();
+            img.onload = () => drawCollisionCanvas();
+            img.src = nextSrc;
+            collisionState.baseImage = img;
+          }
+
           const res = await fetch('/api/map/collision/effective' + mapQuery());
           const json = await res.json();
           if (!res.ok || !json.ok) throw new Error(json.error || 'collision fetch failed');
