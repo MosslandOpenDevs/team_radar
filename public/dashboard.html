@@ -209,9 +209,9 @@
             <select id="collisionMapSelect" class="input" style="width:220px; margin-left:6px;"></select>
           </label>
           <label>Brush
-            <select id="collisionBrush" class="input" style="width:90px; margin-left:6px;">
-              <option value="1">1x1</option>
-              <option value="3">3x3</option>
+            <select id="collisionBrush" class="input" style="width:110px; margin-left:6px;">
+              <option value="1">1타일 (1x1)</option>
+              <option value="3">3타일 (3x3)</option>
             </select>
           </label>
           <button id="collisionSaveBtn" class="btn">Save</button>
@@ -231,8 +231,10 @@
               <span>🟦 override clear</span>
             </div>
             <div class="muted" style="margin:8px 0 6px;">2x2 map 구성 (1 2 / 3 4)</div>
+            <div class="muted" style="margin:4px 0 6px;">편집 단위: 48x48 타일</div>
             <div id="collisionMapGrid" class="map-grid-2x2"></div>
             <div class="muted" id="collisionMeta" style="margin-top:8px;"></div>
+            <div class="muted" id="collisionHover" style="margin-top:4px;"></div>
           </div>
         </div>
       </section>
@@ -285,6 +287,7 @@
       const collisionImportFile = document.getElementById('collisionImportFile');
       const collisionResult = document.getElementById('collisionResult');
       const collisionMeta = document.getElementById('collisionMeta');
+      const collisionHover = document.getElementById('collisionHover');
 
       let memberRows = [];
       let attendanceNameRows = [];
@@ -600,7 +603,7 @@
           ctx.stroke();
         }
 
-        collisionMeta.textContent = `[${collisionState.mapKey}] size ${collisionState.width}x${collisionState.height} | block ${collisionState.overrides.block.length} | clear ${collisionState.overrides.clear.length}`;
+        collisionMeta.textContent = `[${collisionState.mapKey}] size ${collisionState.width}x${collisionState.height} tiles (48x48) | block ${collisionState.overrides.block.length} | clear ${collisionState.overrides.clear.length}`;
       }
 
       function applyCollisionPaint(cx, cy, mode) {
@@ -771,6 +774,21 @@
       leaveDaysInput?.addEventListener('change', refresh);
 
       collisionCanvas?.addEventListener('contextmenu', (e) => e.preventDefault());
+      collisionCanvas?.addEventListener('mousemove', (e) => {
+        if (!collisionState.width || !collisionState.height || !collisionHover) return;
+        const rect = collisionCanvas.getBoundingClientRect();
+        const tile = collisionCanvas.width / collisionState.width;
+        const x = Math.floor((e.clientX - rect.left) / tile);
+        const y = Math.floor((e.clientY - rect.top) / tile);
+        if (x < 0 || y < 0 || x >= collisionState.width || y >= collisionState.height) {
+          collisionHover.textContent = '';
+          return;
+        }
+        collisionHover.textContent = `hover tile: (${x}, ${y}) | world px: (${x * 48}~${x * 48 + 47}, ${y * 48}~${y * 48 + 47})`;
+      });
+      collisionCanvas?.addEventListener('mouseleave', () => {
+        if (collisionHover) collisionHover.textContent = '';
+      });
       collisionCanvas?.addEventListener('mousedown', (e) => {
         if (!collisionState.width || !collisionState.height) return;
         const rect = collisionCanvas.getBoundingClientRect();

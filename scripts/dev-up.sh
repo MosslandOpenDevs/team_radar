@@ -28,4 +28,18 @@ else
   echo "[skip] pg-proxy: tailscale ip not found"
 fi
 
+# one-time refresh: reload today's attendance snapshot after startup
+for i in {1..10}; do
+  if curl -fsS -m 2 http://127.0.0.1:3100/api/team/status >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if curl -fsS -m 5 -X POST http://127.0.0.1:3100/api/attendance/reload-today >/dev/null 2>&1; then
+  echo "[ok] attendance reload-today triggered"
+else
+  echo "[warn] attendance reload-today failed (dashboard not ready or endpoint error)"
+fi
+
 echo "[ok] dev services started"
