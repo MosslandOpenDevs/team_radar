@@ -568,7 +568,8 @@
 
       function drawCollisionCanvas() {
         const ctx = collisionCanvas.getContext('2d');
-        const tile = Math.max(1, Math.floor(Math.min(960 / Math.max(1, collisionState.width), 640 / Math.max(1, collisionState.height))));
+        // 1 collision cell == 48x48 world tile (requested FE-aligned edit view)
+        const tile = 48;
         collisionCanvas.width = Math.max(1, collisionState.width * tile);
         collisionCanvas.height = Math.max(1, collisionState.height * tile);
         ctx.clearRect(0, 0, collisionCanvas.width, collisionCanvas.height);
