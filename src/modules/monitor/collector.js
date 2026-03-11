@@ -740,16 +740,23 @@ function extractAttendanceName(text) {
   const t = compact(text || '');
   if (!t) return null;
 
+  // 임베드/마크다운 기호 제거 (굵게, 백틱, 괄호 등)
+  const cleaned = t.replace(/[*_`~\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+
   // 예: "3월 4일(수) 이상민 ... 출근했습니다." / "... 퇴근했습니다."
-  const dated = t.match(/^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12})/);
+  const dated = cleaned.match(/^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12})/);
   if (dated?.[1]) return dated[1];
 
   // 예: "박정우 재택근무", "홍길동 연차", "김철수 반차"
-  const leaveLike = t.match(/^([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/);
+  const leaveLike = cleaned.match(/^([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/);
   if (leaveLike?.[1]) return leaveLike[1];
 
+  // 문장 중간에서도 이름 + 상태를 찾을 수 있게 보완
+  const leaveLikeAnywhere = cleaned.match(/([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/);
+  if (leaveLikeAnywhere?.[1]) return leaveLikeAnywhere[1];
+
   // 일반 포맷 보조
-  const basic = t.match(/^([가-힣A-Za-z]{2,12})\s+(?:근무|출근|퇴근|휴가|지각|외근|복귀)/);
+  const basic = cleaned.match(/^([가-힣A-Za-z]{2,12})\s+(?:근무|출근|퇴근|휴가|지각|외근|복귀)/);
   if (basic?.[1]) return basic[1];
 
   return null;
