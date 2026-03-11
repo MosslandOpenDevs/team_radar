@@ -283,10 +283,6 @@
         <button class="tab-btn" data-tab="collision">Collision Editor</button>
       </div>
       <section id="tab-overview" class="tab-panel active">
-        <div class="muted" style="margin:8px 2px 12px; display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="hideBotsToggle" checked />
-          <label for="hideBotsToggle">봇 사용자 숨기기</label>
-        </div>
         <div class="grid">
           <div class="card"><h3>근태 요약</h3><ul id="attendanceSummary"></ul></div>
           <div class="card"><h3>업무 요약</h3><ul id="workSummary"></ul></div>
@@ -370,7 +366,11 @@
           <label>조회 기간(일)
             <input id="leaveDaysInput" class="input" type="number" min="1" max="60" value="30" style="width:90px; margin-left:6px;" />
           </label>
-          <button id="leaveRefreshBtn" class="btn">반차/연차/재택 다시조회</button>
+          <label class="muted" style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="hideBotsToggle" />
+            봇 사용자 숨기기
+          </label>
+          <button id="leaveRefreshBtn" class="btn" style="display:none;">반차/연차/재택 다시조회</button>
           <span class="muted" id="leaveMeta"></span>
         </div>
         <div class="table-wrap" style="margin-bottom:12px;">
