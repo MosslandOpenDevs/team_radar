@@ -80,6 +80,36 @@
   /* ── Hidden legacy elements ──────────────────────────── */
   #wrap { position:fixed; top:-9999px; left:-9999px; width:4000px; height:4000px; overflow:hidden; background:#0f1730; }
   #mini-wrap, #mini-title, #mini, #mobileNav { display:none !important; }
+
+  /* ── Mobile layout (< 768px) ─────────────────────────── */
+  @media (max-width: 767px) {
+    /* 상단바 축소 */
+    #topBar { padding:5px 8px; }
+    #mapTitleText { font-size:12px; }
+
+    /* 토글 버튼: 아이콘만, 텍스트 숨김 */
+    .btn-text { display:none; }
+    #toggleGroup button { padding:5px 7px; gap:0; }
+
+    /* 레이아웃: 세로 배치, 스크롤 허용, 자동 높이 */
+    #mapLayout {
+      flex-direction:column; padding:6px; gap:6px;
+      overflow-y:auto; align-items:stretch;
+    }
+
+    /* 포커스 패널: 고정 높이 제거 → canvas 비율에 맞춤 */
+    #focusPane { flex:0 0 auto; height:auto; }
+    #focusHeader { padding:5px 10px; }
+    #focusLabel { font-size:13px; letter-spacing:.4px; }
+    #focusCanvas { width:100%; height:auto; display:block; }
+
+    /* 서브뷰 패널: 가로 3분할, 고정 높이 제거 */
+    #subPane { flex:0 0 auto; height:auto; flex-direction:row; gap:4px; }
+    .sv-item { flex:1; min-width:0; height:auto; }
+    .sv-header { padding:4px 6px; }
+    .sv-label { font-size:10px; letter-spacing:.2px; }
+    .sv-canvas { width:100%; height:auto; display:block; pointer-events:none; }
+  }
 </style>
 </head>
 <body>
@@ -88,9 +118,9 @@
   <div id="topBar">
     <span id="mapTitleText">🗺️ Team Radar Map</span>
     <div id="toggleGroup">
-      <button id="toggleCollision">💥 컬리전: OFF</button>
-      <button id="toggleRooms" class="btn-on">🏠 룸 경계: ON</button>
-      <button id="toggleActors" class="btn-on">👤 캐릭터: ON</button>
+      <button id="toggleCollision"><span class="btn-icon">💥</span><span class="btn-text"> 컬리전: OFF</span></button>
+      <button id="toggleRooms" class="btn-on"><span class="btn-icon">🏠</span><span class="btn-text"> 룸 경계: ON</span></button>
+      <button id="toggleActors" class="btn-on"><span class="btn-icon">👤</span><span class="btn-text"> 캐릭터: ON</span></button>
     </div>
   </div>
 
@@ -224,7 +254,7 @@ let staticLayer = null;
 let staticDirty = true;
 let mobileRoomIndex = 0;
 const mobileRoomLabelEl = document.getElementById('mobileRoomLabel');
-const isMobileView = () => window.innerWidth <= 900;
+const isMobileView = () => false; // 포커스+서브뷰 시스템이 모바일/PC 네비게이션 전담
 
 const ACTOR_COUNT = window.innerWidth <= 900 ? 10 : 14;
 const ACTOR_FRAMES = 6;
@@ -256,7 +286,7 @@ const MOBILE_SLOT_Y = TILE * 2;
 document.getElementById('toggleCollision').onclick = () => {
   showCollision = !showCollision;
   const btn = document.getElementById('toggleCollision');
-  btn.textContent = `💥 컬리전: ${showCollision ? 'ON' : 'OFF'}`;
+  btn.innerHTML = `<span class="btn-icon">💥</span><span class="btn-text"> 컬리전: ${showCollision ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showCollision);
   staticDirty = true;
   draw();
@@ -265,7 +295,7 @@ document.getElementById('toggleCollision').onclick = () => {
 document.getElementById('toggleRooms').onclick = () => {
   showRooms = !showRooms;
   const btn = document.getElementById('toggleRooms');
-  btn.textContent = `🏠 룸 경계: ${showRooms ? 'ON' : 'OFF'}`;
+  btn.innerHTML = `<span class="btn-icon">🏠</span><span class="btn-text"> 룸 경계: ${showRooms ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showRooms);
   staticDirty = true;
   draw();
@@ -274,7 +304,7 @@ document.getElementById('toggleRooms').onclick = () => {
 document.getElementById('toggleActors').onclick = () => {
   showActors = !showActors;
   const btn = document.getElementById('toggleActors');
-  btn.textContent = `👤 캐릭터: ${showActors ? 'ON' : 'OFF'}`;
+  btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> 캐릭터: ${showActors ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showActors);
   draw();
 };
@@ -1379,21 +1409,29 @@ function blitPanels() {
   if (!focusRoom) return;
 
   // ── 포커스 캔버스 ──
+  const isMob = window.innerWidth < 768;
   const fCanvas = document.getElementById('focusCanvas');
   if (fCanvas) {
     const fw = fCanvas.clientWidth || focusRoom.w;
-    const fh = fCanvas.clientHeight || focusRoom.h;
+    const fh = isMob
+      ? Math.round(focusRoom.h * (fw / focusRoom.w))
+      : (fCanvas.clientHeight || focusRoom.h);
     if (fCanvas.width !== fw || fCanvas.height !== fh) { fCanvas.width = fw; fCanvas.height = fh; }
     const fCtx = fCanvas.getContext('2d');
     fCtx.imageSmoothingEnabled = true;
     fCtx.imageSmoothingQuality = 'high';
-    const scale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
-    const dw = Math.round(focusRoom.w * scale);
-    const dh = Math.round(focusRoom.h * scale);
-    const dx = Math.round((fw - dw) / 2);
-    const dy = Math.round((fh - dh) / 2);
-    fCtx.clearRect(0, 0, fw, fh);
-    fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, dx, dy, dw, dh);
+    if (isMob) {
+      fCtx.clearRect(0, 0, fw, fh);
+      fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, 0, 0, fw, fh);
+    } else {
+      const scale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
+      const dw = Math.round(focusRoom.w * scale);
+      const dh = Math.round(focusRoom.h * scale);
+      const dx = Math.round((fw - dw) / 2);
+      const dy = Math.round((fh - dh) / 2);
+      fCtx.clearRect(0, 0, fw, fh);
+      fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, dx, dy, dw, dh);
+    }
   }
 
   // ── 포커스 헤더 ──
@@ -1411,18 +1449,24 @@ function blitPanels() {
     if (!room) continue;
 
     const sw = svCanvas.clientWidth || room.w;
-    const sh = svCanvas.clientHeight || room.h;
+    const sh = isMob
+      ? Math.round(room.h * (sw / room.w))
+      : (svCanvas.clientHeight || room.h);
     if (svCanvas.width !== sw || svCanvas.height !== sh) { svCanvas.width = sw; svCanvas.height = sh; }
     const svCtx = svCanvas.getContext('2d');
     svCtx.imageSmoothingEnabled = true;
     svCtx.imageSmoothingQuality = 'high';
-    const scale = Math.min(sw / room.w, sh / room.h);
-    const dw = Math.round(room.w * scale);
-    const dh = Math.round(room.h * scale);
-    const ddx = Math.round((sw - dw) / 2);
-    const ddy = Math.round((sh - dh) / 2);
     svCtx.clearRect(0, 0, sw, sh);
-    svCtx.drawImage(cv, room.px, room.py, room.w, room.h, ddx, ddy, dw, dh);
+    if (isMob) {
+      svCtx.drawImage(cv, room.px, room.py, room.w, room.h, 0, 0, sw, sh);
+    } else {
+      const scale = Math.min(sw / room.w, sh / room.h);
+      const dw = Math.round(room.w * scale);
+      const dh = Math.round(room.h * scale);
+      const ddx = Math.round((sw - dw) / 2);
+      const ddy = Math.round((sh - dh) / 2);
+      svCtx.drawImage(cv, room.px, room.py, room.w, room.h, ddx, ddy, dw, dh);
+    }
 
     // 레이블 & 배지 업데이트
     const labelEl = svEl.querySelector('.sv-label');
