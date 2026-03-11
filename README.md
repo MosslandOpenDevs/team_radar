@@ -20,7 +20,7 @@ npm run map:serve
 - Dashboard: `http://localhost:3100/dashboard`
 - Map: `http://localhost:8765/composed_set_map.html`
 
-> `map:serve`는 `/home/teny/.openclaw/workspace/map` 경로를 정적으로 서빙합니다.
+> `map:serve`는 `team_radar/map` 경로를 정적으로 서빙합니다.
 
 ---
 
@@ -44,6 +44,9 @@ npm run map:serve
 - `STARTUP_WORK_BACKFILL`, `WORK_BACKFILL_DAYS`
 - `ATTENDANCE_NAME_LOOKBACK_DAYS`
 - `DB_MODE`, `DATABASE_URL` (PostgreSQL 사용 시)
+- `APP_ACCESS_TOKEN` (설정 시 `/login` 기반 접근 제어 활성화)
+- `DASHBOARD_API_BASE`, `ATTENDANCE_PERIODIC_RESYNC_*`
+- `WORK_SUMMARY_*`, `OLLAMA_*`, `GEMINI_*` (업무 요약 생성 옵션)
 
 권장: `.env.example`를 복사해서 `.env` 생성 후 사용
 
@@ -57,7 +60,7 @@ cp .env.example .env
 
 - `npm run collector:start` : Discord monitor 실행 (collector workspace entry)
 - `npm run dashboard:start` : dashboard/API 실행 (dashboard workspace entry)
-- `npm run map:serve` : map frontend 정적 서버 실행 (`/workspace/map`, 8765)
+- `npm run map:serve` : map frontend 정적 서버 실행 (`team_radar/map`, 8765)
 - `npm run dev:up` : collector/dashboard/map 일괄 실행
 - `npm run dev:status` : 3개 서비스 + HTTP 헬스체크
 - `npm run dev:down` : 일괄 종료
@@ -84,6 +87,22 @@ cp .env.example .env
 
 - `scheduledFor`
 - `durationText`
+
+---
+
+## Access Control (Optional)
+
+`APP_ACCESS_TOKEN`을 `.env`에 설정하면 인증이 활성화됩니다.
+
+- 로그인 페이지: `/login`
+- 로그인 성공 후 기본 이동: `/map/composed_set_map.html`
+- 보호 대상: `/map/*`, `/dashboard.html`, `/api/*` 등 주요 경로
+
+```env
+APP_ACCESS_TOKEN=change-this-to-a-long-random-token
+```
+
+설정하지 않으면 기존처럼 인증 없이 접근합니다.
 
 ---
 
@@ -164,7 +183,10 @@ teamradar-map/
 │     └─ dashboard/server.js
 ├─ collector/
 ├─ dashboard/
-├─ map-frontend/
+├─ map/
+│  ├─ composed_set_map.html
+│  ├─ layered_map.html
+│  └─ office_map.html
 ├─ public/
 │  ├─ dashboard.html
 │  ├─ assets/

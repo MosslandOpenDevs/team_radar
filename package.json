@@ -11,7 +11,7 @@
     "dashboard:start": "node dashboard/index.js",
     "dashboard": "node dashboard/index.js",
     "dashboard:src": "node src/modules/dashboard/server.js",
-    "map:serve": "bash -lc 'cd /home/teny/.openclaw/workspace/map && python3 -m http.server 8765 --bind 0.0.0.0'",
+    "map:serve": "bash -lc 'cd ./map && python3 -m http.server 8765 --bind 0.0.0.0'",
     "dev:up": "bash scripts/dev-up.sh",
     "dev:status": "bash scripts/dev-status.sh",
     "dev:down": "bash scripts/dev-down.sh",

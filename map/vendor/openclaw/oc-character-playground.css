@@ -1,0 +1,86 @@
+/* OpenClaw Portable Character Playground (scoped) */
+.ocpg-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+}
+
+.ocpg-actor {
+  position: absolute;
+  width: var(--ocpg-frame-w, 48px);
+  height: var(--ocpg-frame-h, 96px);
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+
+.ocpg-sprite {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.ocpg-name {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 2px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #2d2d2d;
+  background: rgba(0,0,0,0.72);
+  color: #f2f2f2;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ocpg-name::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+  flex: 0 0 auto;
+}
+
+.ocpg-actor.is-away .ocpg-name::before {
+  display: none;
+}
+
+.ocpg-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 2px);
+  transform: translateX(-50%);
+  max-width: 160px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid #2f2f2f;
+  background: rgba(255,255,255,0.95);
+  color: #111;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.ocpg-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(255,255,255,0.95);
+}
+
+.ocpg-hidden { display: none; }

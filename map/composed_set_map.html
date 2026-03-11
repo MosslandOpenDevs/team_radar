@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Composed Office Map</title>
+<style>
+  body { margin:0; background:#0d1222; color:#dbe4ff; font-family:system-ui; padding:14px; }
+  #top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  button { background:#1b2448; color:#dbe4ff; border:1px solid #33406f; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  #wrap { position:relative; display:block; border:1px solid #2a3766; box-shadow:0 10px 30px rgba(0,0,0,.45); width:calc(100vw - 28px); height:calc(100vh - 170px); min-height:520px; overflow:auto; touch-action:none; cursor:grab; background:#0f1730; }
+  #wrap:active { cursor:grabbing; }
+  canvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; max-width:none; height:auto; }
+  #mini-wrap { display:none; }
+  #mini-title { display:none; }
+  #mini { display:none; }
+  #info { margin-top:8px; font-size:12px; opacity:.85; white-space:pre-wrap; }
+  #mobileNav { display:none; gap:8px; align-items:center; }
+  #mobileRoomLabel { font-size:12px; opacity:.9; }
+
+  @media (max-width: 900px) {
+    body { padding:10px; }
+    button { padding:8px 11px; font-size:13px; }
+    #wrap { width: calc(100vw - 22px); height: calc(100vh - 180px); min-height:460px; }
+    #info { font-size:11px; }
+    #mobileNav { display:flex; }
+  }
+</style>
+</head>
+<body>
+<div id="top">
+  <button id="toggleCollision">컬리전 표시: OFF</button>
+  <button id="toggleRooms">룸 경계 표시: ON</button>
+  <button id="toggleActors">캐릭터 이동: ON</button>
+  <div id="mobileNav">
+    <button id="mobilePrevRoom">◀</button>
+    <span id="mobileRoomLabel">모바일 구역: -</span>
+    <button id="mobileNextRoom">▶</button>
+  </div>
+</div>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+  <div id="mini-wrap">
+    <div id="mini-title">MINIMAP</div>
+    <canvas id="mini"></canvas>
+  </div>
+</div>
+<div id="info"></div>
+
+<script>
+const TILE = 48;
+const QS = new URLSearchParams(location.search);
+const API_BASE_FROM_QS = (QS.get('apiBase') || '').trim();
+const MAP_ONLY_MODE = QS.get('mapOnly') === '1';
+const CUSTOM_MODE_QS = (QS.get('custom') || '').trim(); // 1|0
+const DEFAULT_API_BASE = (location.port === '8765')
+  ? `${location.protocol}//${location.hostname}:3100`
+  : location.origin;
+const API_BASE = API_BASE_FROM_QS || DEFAULT_API_BASE;
+const CUSTOM_BASE_MAP = `${API_BASE}/assets/custom-map/base_map.png`;
+const CUSTOM_COLLISION_MASK = `${API_BASE}/assets/custom-map/collision_mask.png`;
+const PREFER_CUSTOM_MAP = CUSTOM_MODE_QS === '1' ? true : (CUSTOM_MODE_QS === '0' ? false : !MAP_ONLY_MODE);
+const CUSTOM_GRID_COLS = 2;
+const CUSTOM_GRID_ROWS = 2;
+const CUSTOM_GRID_GAP_TILES = 0;
+const ASSET_VERSION = '6';
+const STATUS_ROOM_LABELS = ['사무실', '안출근/퇴근', '재택근무', '휴가'];
+let STATUS_ROOM_MAPPING = { working: 0, offwork: 1, remote: 2, vacation: 3 };
+
+const MANIFEST = {
+  Condominium_Design: {
+    floor: 'import/floor/Condominium_Design_layer_1_48x48.png',
+    collision: ['import/collision/Condominium_Design_layer_2_48x48.png']
+  },
+  Condominium_Design_2: {
+    floor: 'import/floor/Condominium_Design_2_layer_1_48x48.png',
+    collision: ['import/collision/Condominium_Design_2_layer_2_48x48.png']
+  },
+  Generic_Home_1: {
+    floor: 'import/floor/Generic_Home_1_Layer_1_48x48.png',
+    collision: ['import/collision/Generic_Home_1_Layer_2_48x48.png']
+  },
+  Gym_2: {
+    floor: 'import/floor/Gym_2_layer_1_48x48.png',
+    collision: ['import/collision/Gym_2_layer_2_48x48.png']
+  },
+  Ice_Cream_Shop_Design: {
+    floor: 'import/floor/Ice_Cream_Shop_Design_layer_1_48x48.png',
+    collision: [
+      'import/collision/Ice_Cream_Shop_Design_layer_2_48x48.png',
+      'import/collision/Ice_Cream_Shop_Design_layer_3_48x48.png'
+    ]
+  },
+  Tv_Studio_Design: {
+    floor: 'import/floor/Tv_Studio_Design_layer_1_48x48.png',
+    collision: ['import/collision/Tv_Studio_Design_layer_2_48x48.png']
+  }
+};
+
+// 타일 좌표 기준 배치 (서로 통로가 생기도록 여유 배치)
+const LAYOUT = [
+  { key:'Generic_Home_1',        tx: 2,  ty: 2,  label:'ENGINEERING CORE' },
+  { key:'Condominium_Design',    tx: 16, ty: 2,  label:'MEETING + OPS' },
+  { key:'Tv_Studio_Design',      tx: 26, ty: 2,  label:'STATUS WALL' },
+  { key:'Gym_2',                 tx: 2,  ty: 12, label:'BREAK / LOUNGE' },
+  { key:'Ice_Cream_Shop_Design', tx: 13, ty: 12, label:'DINING' },
+  { key:'Condominium_Design_2',  tx: 24, ty: 12, label:'COLLAB ZONE' },
+];
+
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const wrap = document.getElementById('wrap');
+const mini = document.getElementById('mini');
+const mctx = mini.getContext('2d');
+mctx.imageSmoothingEnabled = false;
+const info = document.getElementById('info');
+const SHOW_MINIMAP = false;
+let miniScale = 0.12;
+
+let showCollision = false;
+let collisionEditMode = false;
+let showRooms = true;
+let showActors = true;
+let COMPOSED = null; // {w,h, placed:[...], collisionGrid}
+let collisionEditByMap = {}; // { [mapKey]: {width,height,mask:Set,block:Set,clear:Set} }
+let staticLayer = null;
+let staticDirty = true;
+let mobileRoomIndex = 0;
+const mobileRoomLabelEl = document.getElementById('mobileRoomLabel');
+const isMobileView = () => window.innerWidth <= 900;
+
+const ACTOR_COUNT = window.innerWidth <= 900 ? 10 : 14;
+const ACTOR_FRAMES = 6;
+const DATA_POLL_MS = 120000;
+const ACTOR_DIRS = ['down', 'left', 'right', 'up'];
+const SHEETS = Array.from({length:20}, (_,i) => `Premade_Character_48x48_${String(i+1).padStart(2,'0')}`);
+const ACTOR_STATUS = ['출근', '집중', '식사중', '휴게', '회의중'];
+const ACTOR_NAMES = ['Kai','Sena','Haru','Nari','Zoe','Theo','Jisoo','Dami','Yuna','Hana','Leo','Yujin','Momo','Noah','Ara','Evan','Soo','Jun','Rin','Mina','Ian','Lia'];
+const CHAT_LINES = ['집중중...', '커피 한 잔?', '회의 곧 시작', '점심 뭐먹지?', '작업 완료!', '좋아 진행해보자'];
+const actors = [];
+const spriteCache = new Map();
+const spriteReady = new Set();
+let animLast = 0;
+let loopStarted = false;
+let lastInfoUpdate = 0;
+
+// floor 기반 이동 가능 판정 임계값 (값이 높을수록 이동 가능 영역이 좁아짐)
+const FLOOR_ALPHA_MIN = 18;
+const FLOOR_TILE_COVERAGE_MIN = 0.22;
+const COLLISION_ALPHA_MIN = 24;
+const REPULSION_RADIUS = 34;
+const REPULSION_FORCE = 22; // px/sec 기준 완화력
+const BUBBLE_STACK_GAP = 20;
+const VIEW_MARGIN = 140;
+const INFO_UPDATE_MS = 1000;
+const MOBILE_SLOT_X = TILE * 2;
+const MOBILE_SLOT_Y = TILE * 2;
+
+document.getElementById('toggleCollision').onclick = () => {
+  showCollision = !showCollision;
+  document.getElementById('toggleCollision').textContent = `컬리전 표시: ${showCollision ? 'ON' : 'OFF'}`;
+  staticDirty = true;
+  draw();
+};
+
+document.getElementById('toggleRooms').onclick = () => {
+  showRooms = !showRooms;
+  document.getElementById('toggleRooms').textContent = `룸 경계 표시: ${showRooms ? 'ON' : 'OFF'}`;
+  staticDirty = true;
+  draw();
+};
+
+document.getElementById('toggleActors').onclick = () => {
+  showActors = !showActors;
+  document.getElementById('toggleActors').textContent = `캐릭터 이동: ${showActors ? 'ON' : 'OFF'}`;
+  draw();
+};
+
+function getMobileRoomTransform() {
+  if (!COMPOSED || !isMobileView()) return null;
+  const room = COMPOSED.placed[Math.max(0, Math.min(mobileRoomIndex, COMPOSED.placed.length - 1))];
+  if (!room) return null;
+  return {
+    room,
+    offsetX: MOBILE_SLOT_X - room.px,
+    offsetY: MOBILE_SLOT_Y - room.py,
+  };
+}
+
+function focusMobileRoom() {
+  if (!COMPOSED || !isMobileView()) return;
+  const tf = getMobileRoomTransform();
+  if (!tf?.room) return;
+  const room = tf.room;
+  if (mobileRoomLabelEl) mobileRoomLabelEl.textContent = `모바일 구역: ${room.label || room.key} (${mobileRoomIndex + 1}/${COMPOSED.placed.length})`;
+  wrap.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+}
+
+function shiftMobileRoom(delta) {
+  if (!COMPOSED || !isMobileView()) return;
+  mobileRoomIndex = (mobileRoomIndex + delta + COMPOSED.placed.length) % COMPOSED.placed.length;
+  staticDirty = true;
+  draw();
+  focusMobileRoom();
+}
+
+document.getElementById('mobilePrevRoom')?.addEventListener('click', () => shiftMobileRoom(-1));
+document.getElementById('mobileNextRoom')?.addEventListener('click', () => shiftMobileRoom(1));
+
+let touchStartX = null;
+wrap.addEventListener('touchstart', (e) => {
+  if (!isMobileView() || !e.touches?.[0]) return;
+  touchStartX = e.touches[0].clientX;
+}, { passive: true });
+wrap.addEventListener('touchend', (e) => {
+  if (!isMobileView() || touchStartX == null || !e.changedTouches?.[0]) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  touchStartX = null;
+  if (Math.abs(dx) < 40) return;
+  if (dx < 0) shiftMobileRoom(1);
+  else shiftMobileRoom(-1);
+}, { passive: true });
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src + '?v=' + ASSET_VERSION;
+  });
+}
+
+function randInt(n) { return Math.floor(Math.random() * n); }
+
+function isWalkableTile(tx, ty) {
+  if (!COMPOSED) return false;
+  if (tx < 0 || ty < 0 || tx >= COMPOSED.cols || ty >= COMPOSED.rows) return false;
+  return COMPOSED.collisionGrid[ty][tx] === 0;
+}
+
+function findPlacedRoomByTile(tx, ty) {
+  if (!COMPOSED?.placed?.length) return null;
+  const px = tx * TILE;
+  const py = ty * TILE;
+  return COMPOSED.placed.find((r) => px >= r.px && px < (r.px + r.w) && py >= r.py && py < (r.py + r.h)) || null;
+}
+
+function applyCollisionEditAtTile(tx, ty, mode = 'toggle') {
+  const room = findPlacedRoomByTile(tx, ty);
+  if (!room || !room.key || room.key === 'custom') return;
+
+  const localX = tx - Math.floor(room.px / TILE);
+  const localY = ty - Math.floor(room.py / TILE);
+  const st = collisionEditByMap[room.key];
+  if (!st) return;
+
+  const k = `${localX},${localY}`;
+  const baseBlocked = st.mask.has(k);
+  const isBlockedNow = COMPOSED.collisionGrid[ty]?.[tx] === 1;
+
+  if (mode === 'clear' || (!baseBlocked && isBlockedNow)) {
+    st.block.delete(k);
+    if (baseBlocked) st.clear.add(k); else st.clear.delete(k);
+    if (COMPOSED.collisionGrid[ty]) COMPOSED.collisionGrid[ty][tx] = 0;
+  } else {
+    st.clear.delete(k);
+    if (baseBlocked) st.block.delete(k); else st.block.add(k);
+    if (COMPOSED.collisionGrid[ty]) COMPOSED.collisionGrid[ty][tx] = 1;
+  }
+
+  staticDirty = true;
+  draw();
+}
+
+function randomWalkableTile() {
+  if (!COMPOSED) return {tx:1, ty:1};
+  for (let i = 0; i < 5000; i++) {
+    const tx = randInt(COMPOSED.cols);
+    const ty = randInt(COMPOSED.rows);
+    if (isWalkableTile(tx, ty)) return {tx, ty};
+  }
+  return {tx:1, ty:1};
+}
+
+function randomWalkableTileInRoom(room) {
+  if (!room) return randomWalkableTile();
+  const minTX = Math.floor(room.px / TILE);
+  const minTY = Math.floor(room.py / TILE);
+  const maxTX = Math.floor((room.px + room.w - 1) / TILE);
+  const maxTY = Math.floor((room.py + room.h - 1) / TILE);
+
+  for (let i = 0; i < 3000; i++) {
+    const tx = minTX + randInt(Math.max(1, maxTX - minTX + 1));
+    const ty = minTY + randInt(Math.max(1, maxTY - minTY + 1));
+    if (isWalkableTile(tx, ty)) return {tx, ty};
+  }
+  return randomWalkableTile();
+}
+
+function fitTextByWidth(ctx, text, maxWidth) {
+  const src = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!src) return '';
+  if (ctx.measureText(src).width <= maxWidth) return src;
+  let out = src;
+  while (out.length > 1 && ctx.measureText(`${out}…`).width > maxWidth) {
+    out = out.slice(0, -1);
+  }
+  return `${out}…`;
+}
+
+function actorBubbleText(a) {
+  if (a.workRecent && a.workRecent.length) {
+    const pick = a.workRecent[randInt(a.workRecent.length)] || {};
+    const s = (pick.summaryShort || pick.summary || '').replace(/\s+/g, ' ').trim();
+    return `${a.name}: ${s}`;
+  }
+  return `${a.name}: ${CHAT_LINES[randInt(CHAT_LINES.length)]}`;
+}
+
+function resolveAttendanceState(user, todayAttendanceByName = {}) {
+  const byUser = user?.attendance?.state;
+  if (byUser && byUser !== 'unknown') return byUser;
+
+  const alias = user?.attendanceAlias;
+  if (alias && todayAttendanceByName[alias]?.state) return todayAttendanceByName[alias].state;
+
+  return '-';
+}
+
+function toVisualStatus(user, todayAttendanceByName = {}) {
+  const attendance = resolveAttendanceState(user, todayAttendanceByName);
+  const work = user?.work?.state || '-';
+  return `근태:${attendance} · 업무:${work}`;
+}
+
+function statusRoomIndex(user, todayAttendanceByName = {}) {
+  const attendance = resolveAttendanceState(user, todayAttendanceByName);
+  const work = String(user?.work?.state || '-');
+
+  if (/안출근|퇴근/.test(attendance)) return STATUS_ROOM_MAPPING.offwork ?? 1;
+  if (/재택/.test(attendance)) return STATUS_ROOM_MAPPING.remote ?? 2;
+  if (/휴가|연차|반차/.test(attendance)) return STATUS_ROOM_MAPPING.vacation ?? 3;
+  if (/진행중|리뷰중/.test(work) || /출근|복귀/.test(attendance)) return STATUS_ROOM_MAPPING.working ?? 0;
+  return STATUS_ROOM_MAPPING.offwork ?? 1;
+}
+
+function statusLabelForSlot(slotIdx) {
+  if (Number(STATUS_ROOM_MAPPING.working) === Number(slotIdx)) return '사무실';
+  if (Number(STATUS_ROOM_MAPPING.offwork) === Number(slotIdx)) return '안출근/퇴근';
+  if (Number(STATUS_ROOM_MAPPING.remote) === Number(slotIdx)) return '재택근무';
+  if (Number(STATUS_ROOM_MAPPING.vacation) === Number(slotIdx)) return '휴가';
+  return STATUS_ROOM_LABELS[slotIdx] || `구역${slotIdx + 1}`;
+}
+
+function buildActorFromUser(u, i, workByUser = {}, todayAttendanceByName = {}) {
+  const preferredIndex = statusRoomIndex(u, todayAttendanceByName);
+  const roomIndex = Math.min(preferredIndex, Math.max(0, COMPOSED.placed.length - 1));
+  const room = COMPOSED.placed[roomIndex];
+  const spawn = randomWalkableTileInRoom(room);
+  const target = randomWalkableTileInRoom(room);
+  const attendanceState = resolveAttendanceState(u, todayAttendanceByName);
+  const status = toVisualStatus(u, todayAttendanceByName);
+  const recent = (workByUser[u.userId] || []).slice(0, 5);
+
+  return {
+    id: u.userId || String(i + 1).padStart(2, '0'),
+    name: u.displayName || u.userId || ACTOR_NAMES[i % ACTOR_NAMES.length],
+    status,
+    online: !/퇴근|안출근|휴가|반차|자리비움/.test(attendanceState || ''),
+    roomIndex,
+    x: spawn.tx * TILE + TILE / 2,
+    y: spawn.ty * TILE + TILE / 2,
+    targetX: target.tx * TILE + TILE / 2,
+    targetY: target.ty * TILE + TILE / 2,
+    speed: 42 + Math.random() * 28,
+    dir: ACTOR_DIRS[randInt(ACTOR_DIRS.length)],
+    frame: 1,
+    moving: true,
+    waitUntil: 0,
+    sheet: u.characterSheet || SHEETS[i % SHEETS.length],
+    lastSpriteSrc: '',
+    workRecent: recent,
+    bubbleText: actorBubbleText({ name: u.displayName || u.userId || 'user', workRecent: recent }),
+    bubbleUntil: performance.now() + 800 + Math.random() * 1200,
+    nextBubbleAt: performance.now() + 3000 + Math.random() * 6000,
+    nextStateAt: Number.MAX_SAFE_INTEGER,
+    nameW: null,
+    statusW: null,
+    bubbleW: null,
+  };
+}
+
+function createActors(seedUsers = null, workByUser = {}, todayAttendanceByName = {}) {
+  actors.length = 0;
+  const users = (seedUsers && seedUsers.length)
+    ? seedUsers
+    : Array.from({ length: ACTOR_COUNT }, (_, i) => ({
+        userId: String(i + 1).padStart(2, '0'),
+        displayName: ACTOR_NAMES[i % ACTOR_NAMES.length],
+        characterSheet: SHEETS[i % SHEETS.length],
+      }));
+
+  for (let i = 0; i < users.length; i++) {
+    actors.push(buildActorFromUser(users[i], i, workByUser, todayAttendanceByName));
+  }
+}
+
+function syncActors(seedUsers = [], workByUser = {}, todayAttendanceByName = {}) {
+  const byId = new Map(actors.map((a) => [String(a.id), a]));
+  const next = [];
+
+  for (let i = 0; i < seedUsers.length; i++) {
+    const u = seedUsers[i];
+    const id = String(u.userId || String(i + 1).padStart(2, '0'));
+    const prev = byId.get(id);
+
+    if (!prev) {
+      next.push(buildActorFromUser(u, i, workByUser, todayAttendanceByName));
+      continue;
+    }
+
+    const preferredIndex = statusRoomIndex(u, todayAttendanceByName);
+    const roomIndex = Math.min(preferredIndex, Math.max(0, COMPOSED.placed.length - 1));
+    const room = COMPOSED.placed[roomIndex];
+    const attendanceState = resolveAttendanceState(u, todayAttendanceByName);
+    const recent = (workByUser[u.userId] || []).slice(0, 5);
+
+    const actor = {
+      ...prev,
+      id,
+      name: u.displayName || u.userId || prev.name,
+      status: toVisualStatus(u, todayAttendanceByName),
+      online: !/퇴근|안출근|휴가|반차|자리비움/.test(attendanceState || ''),
+      sheet: u.characterSheet || prev.sheet,
+      workRecent: recent,
+    };
+
+    // 상태 존(방) 이동이 없으면 기존 좌표 유지해서 재배치 깜빡임 방지
+    if (prev.roomIndex !== roomIndex) {
+      const spawn = randomWalkableTileInRoom(room);
+      const target = randomWalkableTileInRoom(room);
+      actor.roomIndex = roomIndex;
+      actor.x = spawn.tx * TILE + TILE / 2;
+      actor.y = spawn.ty * TILE + TILE / 2;
+      actor.targetX = target.tx * TILE + TILE / 2;
+      actor.targetY = target.ty * TILE + TILE / 2;
+      actor.moving = true;
+      actor.waitUntil = 0;
+    }
+
+    next.push(actor);
+  }
+
+  actors.length = 0;
+  actors.push(...next);
+}
+
+async function pollTeamDataAndSyncActors() {
+  try {
+    const [statusRes, logsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/team/status?hideBots=1`),
+      fetch(`${API_BASE}/api/team/logs?limit=500&hideBots=1`),
+    ]);
+    if (!statusRes.ok || !logsRes.ok) return;
+
+    const status = await statusRes.json();
+    const logs = await logsRes.json();
+    const workRows = (logs.rows || []).filter((r) => r.kind === 'work');
+    const workByUser = {};
+    for (const row of workRows) {
+      workByUser[row.userId] ||= [];
+      workByUser[row.userId].push(row);
+    }
+
+    const users = (status.users || []).filter((u) => u.work || u.attendance || u.attendanceAlias);
+    if (!users.length) return;
+
+    if (!actors.length) createActors(users, workByUser, status.todayAttendanceByName || {});
+    else syncActors(users, workByUser, status.todayAttendanceByName || {});
+  } catch (e) {
+    console.warn('[map] team data polling failed:', e?.message || e);
+  }
+}
+
+function frameSrc(a) {
+  const state = a.moving ? 'walk' : 'idle';
+  return `./assets/characters/sliced_v5/${a.sheet}/${state}_${a.dir}_f${a.frame}.png`;
+}
+
+function getSprite(src) {
+  if (!spriteCache.has(src)) {
+    const img = new Image();
+    img.onload = () => spriteReady.add(src);
+    img.src = src;
+    spriteCache.set(src, img);
+  }
+  return spriteCache.get(src);
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function rectIntersects(a, b) {
+  return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+}
+
+function getViewportBounds() {
+  const x = wrap.scrollLeft;
+  const y = wrap.scrollTop;
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  return {
+    x,
+    y,
+    w,
+    h,
+    x0: Math.max(0, x - VIEW_MARGIN),
+    y0: Math.max(0, y - VIEW_MARGIN),
+    x1: Math.min(cv.width, x + w + VIEW_MARGIN),
+    y1: Math.min(cv.height, y + h + VIEW_MARGIN),
+  };
+}
+
+async function preloadActorSprites() {
+  const tasks = [];
+  for (const sheet of SHEETS) {
+    for (const state of ['idle', 'walk']) {
+      for (const dir of ACTOR_DIRS) {
+        for (let f = 1; f <= ACTOR_FRAMES; f++) {
+          const src = `./assets/characters/sliced_v5/${sheet}/${state}_${dir}_f${f}.png`;
+          if (spriteCache.has(src)) continue;
+          tasks.push(new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => { spriteReady.add(src); resolve(); };
+            img.onerror = () => resolve();
+            img.src = src;
+            spriteCache.set(src, img);
+          }));
+        }
+      }
+    }
+  }
+  await Promise.all(tasks);
+}
+
+function updateActors(dt, now) {
+  if (!showActors || !COMPOSED) return;
+  for (const a of actors) {
+    const room = COMPOSED.placed[a.roomIndex];
+
+    if (!a.moving) {
+      if (now >= a.waitUntil) {
+        const t = randomWalkableTileInRoom(room);
+        a.targetX = t.tx * TILE + TILE / 2;
+        a.targetY = t.ty * TILE + TILE / 2;
+        a.moving = true;
+      }
+    } else {
+      const dx = a.targetX - a.x;
+      const dy = a.targetY - a.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 2) {
+        a.moving = false;
+        a.waitUntil = now + 600 + Math.random() * 2200;
+      } else {
+        if (Math.abs(dx) > Math.abs(dy)) a.dir = dx >= 0 ? 'right' : 'left';
+        else a.dir = dy >= 0 ? 'down' : 'up';
+
+        const step = (a.speed * dt) / 1000;
+        let nx = a.x + (dx / dist) * step;
+        let ny = a.y + (dy / dist) * step;
+
+        // local separation (군집 겹침 방지)
+        let sx = 0, sy = 0;
+        for (const b of actors) {
+          if (b === a) continue;
+          const vx = nx - b.x;
+          const vy = ny - b.y;
+          const d2 = vx * vx + vy * vy;
+          if (d2 <= 1) continue;
+          const d = Math.sqrt(d2);
+          if (d < REPULSION_RADIUS) {
+            const f = ((REPULSION_RADIUS - d) / REPULSION_RADIUS) * (REPULSION_FORCE * dt / 1000);
+            sx += (vx / d) * f;
+            sy += (vy / d) * f;
+          }
+        }
+        nx += sx;
+        ny += sy;
+
+        const ntx = Math.floor(nx / TILE);
+        const nty = Math.floor(ny / TILE);
+        const inRoom = room && nx >= room.px && nx < (room.px + room.w) && ny >= room.py && ny < (room.py + room.h);
+
+        if (!isWalkableTile(ntx, nty) || !inRoom) {
+          a.moving = false;
+          a.waitUntil = now + 400 + Math.random() * 1000;
+        } else {
+          a.x = nx;
+          a.y = ny;
+        }
+      }
+    }
+
+    if (now >= a.nextBubbleAt) {
+      a.bubbleText = actorBubbleText(a);
+      a.bubbleW = null;
+      a.bubbleUntil = now + 2200;
+      a.nextBubbleAt = now + 5000 + Math.random() * 7000;
+    }
+
+    // 상태는 서버 폴링 데이터 기준으로 유지
+  }
+
+  if (!animLast || now - animLast > 130) {
+    for (const a of actors) a.frame = (a.frame % ACTOR_FRAMES) + 1;
+    animLast = now;
+  }
+}
+
+async function build() {
+  const cache = {};
+  let useCustomMap = false;
+  let customCatalog = [];
+  const effectiveByMap = {};
+  collisionEditByMap = {};
+
+  if (PREFER_CUSTOM_MAP) {
+    try {
+      const [catRes, mapRes] = await Promise.all([
+        fetch(`${API_BASE}/api/map/collision/catalog`),
+        fetch(`${API_BASE}/api/map/status-room-mapping`).catch(() => null),
+      ]);
+      if (catRes.ok) {
+        const cat = await catRes.json();
+        customCatalog = (cat.maps || []).filter((m) => m.baseFile && m.collisionFile).slice(0, CUSTOM_GRID_COLS * CUSTOM_GRID_ROWS);
+      }
+      if (mapRes && mapRes.ok) {
+        const mj = await mapRes.json();
+        const m = mj?.mapping || {};
+        STATUS_ROOM_MAPPING = {
+          working: Number(m?.slotByStatus?.working ?? 0),
+          offwork: Number(m?.slotByStatus?.offwork ?? m?.slotByStatus?.idle ?? 1),
+          remote: Number(m?.slotByStatus?.remote ?? 2),
+          vacation: Number(m?.slotByStatus?.vacation ?? 3),
+        };
+        if (Array.isArray(m?.labels) && m.labels.length >= 4) {
+          for (let i = 0; i < 4; i += 1) STATUS_ROOM_LABELS[i] = m.labels[i] || STATUS_ROOM_LABELS[i];
+        }
+      }
+
+      if (customCatalog.length > 0) {
+        for (const m of customCatalog) {
+          const base = await loadImage(`${API_BASE}/assets/custom-map/${m.baseFile}`);
+          const mask = await loadImage(`${API_BASE}/assets/custom-map/${m.collisionFile}`);
+          cache[m.key] = { floor: base, collision: [mask], label: m.label || m.key };
+        }
+
+        // load dashboard effective collision (mask + overrides) per map
+        await Promise.all(customCatalog.map(async (m) => {
+          try {
+            const [rEff, rOv] = await Promise.all([
+              fetch(`${API_BASE}/api/map/collision/effective?mapKey=${encodeURIComponent(m.key)}`),
+              fetch(`${API_BASE}/api/map/collision/overrides?mapKey=${encodeURIComponent(m.key)}`),
+            ]);
+            if (!rEff.ok) return;
+            const j = await rEff.json();
+            if (!j?.ok) return;
+            const ov = rOv.ok ? await rOv.json() : { overrides: { block: [], clear: [] } };
+
+            effectiveByMap[m.key] = {
+              width: Number(j.effective?.width || 0),
+              height: Number(j.effective?.height || 0),
+              blocked: new Set((j.effective?.blocked || []).map((p) => `${p.x},${p.y}`)),
+            };
+            collisionEditByMap[m.key] = {
+              width: Number(j.mask?.width || 0),
+              height: Number(j.mask?.height || 0),
+              mask: new Set((j.mask?.blocked || []).map((p) => `${p.x},${p.y}`)),
+              block: new Set((ov.overrides?.block || []).map((p) => `${p.x},${p.y}`)),
+              clear: new Set((ov.overrides?.clear || []).map((p) => `${p.x},${p.y}`)),
+            };
+          } catch (_) {}
+        }));
+
+        useCustomMap = true;
+        console.log(`[MAP] custom map set loaded (${customCatalog.length})`);
+      } else {
+        const base = await loadImage(CUSTOM_BASE_MAP);
+        const mask = await loadImage(CUSTOM_COLLISION_MASK);
+        cache.__custom__ = { floor: base, collision: [mask], label: 'CUSTOM OFFICE' };
+        useCustomMap = true;
+        console.log('[MAP] custom base/mask loaded');
+      }
+    } catch (e) {
+      console.warn('[MAP] custom map not found, fallback to composed rooms');
+    }
+  }
+
+  if (!useCustomMap) {
+    for (const k of Object.keys(MANIFEST)) {
+      const f = await loadImage(MANIFEST[k].floor);
+      const cols = [];
+      for (const c of MANIFEST[k].collision) cols.push(await loadImage(c));
+      cache[k] = { floor: f, collision: cols };
+    }
+  }
+
+  // 캔버스 크기 계산
+  let maxW = 0, maxH = 0;
+  const placed = [];
+
+  if (useCustomMap) {
+    if (customCatalog.length > 0) {
+      let maxCellW = 0;
+      let maxCellH = 0;
+      for (const m of customCatalog) {
+        const src = cache[m.key];
+        maxCellW = Math.max(maxCellW, src.floor.width);
+        maxCellH = Math.max(maxCellH, src.floor.height);
+      }
+      const gapPx = CUSTOM_GRID_GAP_TILES * TILE;
+
+      customCatalog.forEach((m, idx) => {
+        const src = cache[m.key];
+        const col = idx % CUSTOM_GRID_COLS;
+        const row = Math.floor(idx / CUSTOM_GRID_COLS);
+        const px = col * (maxCellW + gapPx);
+        const py = row * (maxCellH + gapPx);
+        const w = src.floor.width;
+        const h = src.floor.height;
+        const statusLabel = statusLabelForSlot(idx);
+        placed.push({ key: m.key, tx: 0, ty: 0, label: statusLabel, px, py, w, h, floor: src.floor, collisionImgs: src.collision });
+        maxW = Math.max(maxW, px + w);
+        maxH = Math.max(maxH, py + h);
+      });
+      maxW += TILE * 2;
+      maxH += TILE * 2;
+    } else {
+      const src = cache.__custom__;
+      const w = src.floor.width;
+      const h = src.floor.height;
+      placed.push({ key:'custom', tx:0, ty:0, label:'CUSTOM OFFICE', px:0, py:0, w, h, floor: src.floor, collisionImgs: src.collision });
+      maxW = w;
+      maxH = h;
+    }
+  } else {
+    for (const room of LAYOUT) {
+      const src = cache[room.key];
+      const px = room.tx * TILE;
+      const py = room.ty * TILE;
+      const w = src.floor.width;
+      const h = src.floor.height;
+      placed.push({ ...room, px, py, w, h, floor: src.floor, collisionImgs: src.collision });
+      maxW = Math.max(maxW, px + w + TILE * 2);
+      maxH = Math.max(maxH, py + h + TILE * 2);
+    }
+  }
+
+  const cols = Math.ceil(maxW / TILE), rows = Math.ceil(maxH / TILE);
+  const grid = Array.from({ length: rows }, () => Array(cols).fill(1));
+
+  const floorCv = document.createElement('canvas');
+  floorCv.width = maxW; floorCv.height = maxH;
+  const fctx = floorCv.getContext('2d');
+
+  const colCv = document.createElement('canvas');
+  colCv.width = maxW; colCv.height = maxH;
+  const cctx = colCv.getContext('2d');
+
+  for (const r of placed) {
+    fctx.drawImage(r.floor, r.px, r.py);
+    for (const cim of r.collisionImgs) {
+      if (useCustomMap) cctx.drawImage(cim, 0, 0, cim.width, cim.height, r.px, r.py, r.w, r.h);
+      else cctx.drawImage(cim, r.px, r.py);
+    }
+  }
+
+  const floorData = fctx.getImageData(0, 0, maxW, maxH).data;
+  const colData = cctx.getImageData(0, 0, maxW, maxH).data;
+
+  for (let gy = 0; gy < rows; gy++) {
+    for (let gx = 0; gx < cols; gx++) {
+      const sx = gx * TILE, sy = gy * TILE;
+
+      let floorSamples = 0;
+      let floorHit = 0;
+      let blockedHits = 0;
+
+      for (let py = sy; py < Math.min(sy + TILE, maxH); py += 4) {
+        for (let px = sx; px < Math.min(sx + TILE, maxW); px += 4) {
+          floorSamples++;
+
+          const fi = (py * maxW + px) * 4;
+          if (floorData[fi + 3] >= FLOOR_ALPHA_MIN) floorHit++;
+
+          const ci = (py * maxW + px) * 4;
+          const r = colData[ci];
+          const g = colData[ci + 1];
+          const b = colData[ci + 2];
+          const a = colData[ci + 3];
+          const nonBlack = (r + g + b) > 36;
+
+          if (useCustomMap) {
+            if (a >= 8 && nonBlack) blockedHits++;
+          } else {
+            if (a >= COLLISION_ALPHA_MIN) blockedHits++;
+          }
+        }
+      }
+
+      const floorCoverage = floorSamples ? (floorHit / floorSamples) : 0;
+      const walkableByFloor = floorCoverage >= FLOOR_TILE_COVERAGE_MIN;
+      const blockedByCollision = blockedHits > 2;
+
+      grid[gy][gx] = (walkableByFloor && !blockedByCollision) ? 0 : 1;
+    }
+  }
+
+  if (useCustomMap && customCatalog.length > 0) {
+    // apply exact same effective collision used by dashboard editor (48x48 tile domain)
+    for (const r of placed) {
+      const eff = effectiveByMap[r.key];
+      if (!eff?.width || !eff?.height) continue;
+
+      const baseTX = Math.floor(r.px / TILE);
+      const baseTY = Math.floor(r.py / TILE);
+
+      for (let y = 0; y < eff.height; y++) {
+        for (let x = 0; x < eff.width; x++) {
+          const gx = baseTX + x;
+          const gy = baseTY + y;
+          if (!grid[gy] || grid[gy][gx] === undefined) continue;
+          grid[gy][gx] = eff.blocked.has(`${x},${y}`) ? 1 : 0;
+        }
+      }
+    }
+  }
+
+  if (!useCustomMap) {
+    for (const r of placed) {
+      const minTX = Math.floor(r.px / TILE);
+      const minTY = Math.floor(r.py / TILE);
+      const maxTX = Math.floor((r.px + r.w - 1) / TILE);
+      const maxTY = Math.floor((r.py + r.h - 1) / TILE);
+
+      for (let x = minTX; x <= maxTX; x++) {
+        if (grid[minTY] && grid[minTY][x] !== undefined) grid[minTY][x] = 1;
+        if (grid[maxTY] && grid[maxTY][x] !== undefined) grid[maxTY][x] = 1;
+      }
+      for (let y = minTY; y <= maxTY; y++) {
+        if (grid[y] && grid[y][minTX] !== undefined) grid[y][minTX] = 1;
+        if (grid[y] && grid[y][maxTX] !== undefined) grid[y][maxTX] = 1;
+      }
+    }
+  }
+
+  COMPOSED = { w:maxW, h:maxH, cols, rows, placed, collisionGrid:grid, customMode: useCustomMap };
+
+  cv.width = COMPOSED.w;
+  cv.height = COMPOSED.h;
+  staticLayer = document.createElement('canvas');
+  staticLayer.width = COMPOSED.w;
+  staticLayer.height = COMPOSED.h;
+  staticDirty = true;
+
+  await preloadActorSprites();
+  createActors();
+  if (!MAP_ONLY_MODE) {
+    await pollTeamDataAndSyncActors();
+    setInterval(pollTeamDataAndSyncActors, DATA_POLL_MS);
+  } else {
+    console.log('[MAP] mapOnly=1: API polling disabled, local demo actors only');
+  }
+  draw();
+  focusMobileRoom();
+  if (!loopStarted) startLoop();
+}
+
+function draw() {
+  if (!COMPOSED) return;
+
+  if (staticDirty && staticLayer) {
+    const sctx = staticLayer.getContext('2d');
+    sctx.clearRect(0, 0, staticLayer.width, staticLayer.height);
+
+    // base floor
+    sctx.fillStyle = '#171d33';
+    sctx.fillRect(0, 0, staticLayer.width, staticLayer.height);
+
+    // subtle corridor grid
+    sctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    sctx.lineWidth = 1;
+    for (let x = 0; x <= COMPOSED.cols; x++) {
+      sctx.beginPath(); sctx.moveTo(x * TILE + .5, 0); sctx.lineTo(x * TILE + .5, staticLayer.height); sctx.stroke();
+    }
+    for (let y = 0; y <= COMPOSED.rows; y++) {
+      sctx.beginPath(); sctx.moveTo(0, y * TILE + .5); sctx.lineTo(staticLayer.width, y * TILE + .5); sctx.stroke();
+    }
+
+    // draw room floors + collision layer as visible objects
+    sctx.font = '12px monospace';
+    const mobileTf = getMobileRoomTransform();
+    const visibleRooms = isMobileView()
+      ? [mobileTf?.room].filter(Boolean)
+      : COMPOSED.placed;
+
+    for (const r of visibleRooms) {
+      const dx = (isMobileView() && mobileTf?.room === r) ? (r.px + mobileTf.offsetX) : r.px;
+      const dy = (isMobileView() && mobileTf?.room === r) ? (r.py + mobileTf.offsetY) : r.py;
+
+      // 실제 렌더링은 floor(base map)만 표시
+      sctx.drawImage(r.floor, dx, dy);
+
+      if (showRooms) {
+        sctx.strokeStyle = 'rgba(120,180,255,0.55)';
+        sctx.lineWidth = 2;
+        sctx.strokeRect(dx + 1, dy + 1, r.w - 2, r.h - 2);
+        sctx.fillStyle = 'rgba(8,12,24,0.82)';
+        const tw = sctx.measureText(r.label).width;
+        sctx.fillRect(dx + 4, dy + 4, tw + 10, 16);
+        sctx.fillStyle = '#d7e5ff';
+        sctx.fillText(r.label, dx + 9, dy + 16);
+      }
+    }
+
+    if (showCollision) {
+      if (isMobileView() && mobileTf?.room) {
+        const activeRoom = mobileTf.room;
+        const minX = Math.floor(activeRoom.px / TILE);
+        const minY = Math.floor(activeRoom.py / TILE);
+        const maxX = Math.floor((activeRoom.px + activeRoom.w - 1) / TILE);
+        const maxY = Math.floor((activeRoom.py + activeRoom.h - 1) / TILE);
+        for (let y = minY; y <= maxY; y++) {
+          for (let x = minX; x <= maxX; x++) {
+            if (COMPOSED.collisionGrid[y]?.[x]) {
+              sctx.fillStyle = 'rgba(255,60,60,0.42)';
+              sctx.fillRect(x * TILE + mobileTf.offsetX, y * TILE + mobileTf.offsetY, TILE, TILE);
+            }
+          }
+        }
+      } else {
+        for (let y = 0; y < COMPOSED.rows; y++) {
+          for (let x = 0; x < COMPOSED.cols; x++) {
+            if (COMPOSED.collisionGrid[y]?.[x]) {
+              sctx.fillStyle = 'rgba(255,60,60,0.42)';
+              sctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+            }
+          }
+        }
+      }
+    }
+
+    staticDirty = false;
+  }
+
+  const vp = getViewportBounds();
+  const sw = Math.max(1, vp.x1 - vp.x0);
+  const sh = Math.max(1, vp.y1 - vp.y0);
+  ctx.clearRect(vp.x0, vp.y0, sw, sh);
+  if (staticLayer) ctx.drawImage(staticLayer, vp.x0, vp.y0, sw, sh, vp.x0, vp.y0, sw, sh);
+
+  if (showActors) {
+    const mobileTf = getMobileRoomTransform();
+    const sorted = actors
+      .filter((a) => {
+        const isMobile = isMobileView();
+        if (isMobile && Number(a.roomIndex) !== Number(mobileRoomIndex)) return false;
+        const ox = (isMobile && mobileTf) ? mobileTf.offsetX : 0;
+        const oy = (isMobile && mobileTf) ? mobileTf.offsetY : 0;
+        const rx = a.x + ox;
+        const ry = a.y + oy;
+        return (rx >= vp.x0 && rx <= vp.x1 && ry >= vp.y0 && ry <= vp.y1);
+      })
+      .sort((a, b) => a.y - b.y);
+    const bubbleRects = [];
+    ctx.font = '11px monospace';
+    for (const a of sorted) {
+      const ox = (isMobileView() && mobileTf) ? mobileTf.offsetX : 0;
+      const oy = (isMobileView() && mobileTf) ? mobileTf.offsetY : 0;
+      const rx = a.x + ox;
+      const ry = a.y + oy;
+      const dx = Math.round(rx - 24);
+      const dy = Math.round(ry - 96);
+
+      // foot shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.fillRect(Math.round(rx - 9), Math.round(ry - 3), 18, 6);
+
+      const curSrc = frameSrc(a);
+      const sprite = getSprite(curSrc);
+      if (sprite && sprite.complete && sprite.naturalWidth > 0) {
+        a.lastSpriteSrc = curSrc;
+        ctx.drawImage(sprite, dx, dy, 48, 96);
+      } else if (a.lastSpriteSrc) {
+        const last = getSprite(a.lastSpriteSrc);
+        if (last && last.complete && last.naturalWidth > 0) ctx.drawImage(last, dx, dy, 48, 96);
+      }
+
+      // 하단 닉네임 태그 + 초록점 + 상태
+      const nick = a.name;
+      if (a.nameW == null) a.nameW = ctx.measureText(nick).width;
+      const nw = a.nameW;
+      const tagX = Math.round(rx - nw / 2 - 13);
+      const tagY = Math.round(ry + 6);
+      const tagW = Math.round(nw + 26);
+      const tagH = 14;
+
+      ctx.shadowColor = 'rgba(0,0,0,0.35)';
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetY = 1;
+      roundRectPath(ctx, tagX, tagY, tagW, tagH, 7);
+      ctx.fillStyle = 'rgba(8,12,24,0.93)';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+
+      ctx.strokeStyle = 'rgba(145,170,220,0.22)';
+      ctx.lineWidth = 1;
+      roundRectPath(ctx, tagX + 0.5, tagY + 0.5, tagW - 1, tagH - 1, 7);
+      ctx.stroke();
+
+      // online dot
+      ctx.fillStyle = a.online ? '#21e68a' : '#5f6b82';
+      ctx.beginPath();
+      ctx.arc(tagX + 8, tagY + 7, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#e8f0ff';
+      ctx.fillText(nick, tagX + 14, tagY + 10);
+
+      // 말풍선
+      if (performance.now() < a.bubbleUntil) {
+        const rawText = a.bubbleText || '';
+        if (a.bubbleW == null) a.bubbleW = Math.min(260, ctx.measureText(rawText).width + 16);
+        const bw = a.bubbleW;
+        const text = fitTextByWidth(ctx, rawText, bw - 16);
+        const bh = 18;
+        const bx = Math.round(rx - bw / 2);
+        let by = Math.round(dy - 19);
+
+        // simple anti-overlap stacking
+        let rect = { x: bx, y: by, w: bw, h: bh + 6 };
+        let guard = 0;
+        while (bubbleRects.some((r) => rectIntersects(rect, r)) && guard < 8) {
+          by -= BUBBLE_STACK_GAP;
+          rect = { x: bx, y: by, w: bw, h: bh + 6 };
+          guard++;
+        }
+        bubbleRects.push(rect);
+
+        ctx.shadowColor = 'rgba(0,0,0,0.28)';
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetY = 1;
+        roundRectPath(ctx, bx, by, bw, bh, 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.98)';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+
+        // bubble tail
+        ctx.beginPath();
+        ctx.moveTo(Math.round(rx - 5), by + bh - 1);
+        ctx.lineTo(Math.round(rx + 5), by + bh - 1);
+        ctx.lineTo(Math.round(rx), by + bh + 6);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255,255,255,0.98)';
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(28,38,70,0.18)';
+        ctx.lineWidth = 1;
+        roundRectPath(ctx, bx + 0.5, by + 0.5, bw - 1, bh - 1, 8);
+        ctx.stroke();
+
+        ctx.fillStyle = '#2a3155';
+        ctx.fillText(text, bx + 8, by + 12);
+      }
+    }
+  }
+
+  const now = performance.now();
+  if (now - lastInfoUpdate > INFO_UPDATE_MS) {
+    let blocked = 0;
+    for (const row of COMPOSED.collisionGrid) for (const c of row) if (c) blocked++;
+    const modeText = COMPOSED.customMode ? 'Custom Base+Mask' : 'Composed Rooms';
+    info.textContent = `Composed Map (${modeText})\n크기: ${COMPOSED.w}x${COMPOSED.h} px (${COMPOSED.cols}x${COMPOSED.rows} tiles @48)\n컬리전 편집 기준: 48x48 타일맵 (Dashboard effective collision 동기화)\n방 수: ${COMPOSED.placed.length}\n캐릭터: ${actors.length} (서버 데이터 기반, 2분 폴링)\nblocked tiles: ${blocked}`;
+    lastInfoUpdate = now;
+  }
+
+  window.composedCollisionGrid = COMPOSED.collisionGrid;
+}
+
+function drawMiniMap() {
+  if (!SHOW_MINIMAP) return;
+  if (!COMPOSED || !staticLayer) return;
+
+  miniScale = Math.min(220 / COMPOSED.w, 140 / COMPOSED.h);
+  mini.width = Math.max(1, Math.floor(COMPOSED.w * miniScale));
+  mini.height = Math.max(1, Math.floor(COMPOSED.h * miniScale));
+
+  mctx.clearRect(0, 0, mini.width, mini.height);
+  mctx.drawImage(staticLayer, 0, 0, mini.width, mini.height);
+
+  // actors as dots
+  if (showActors) {
+    mctx.fillStyle = '#6be7a0';
+    for (const a of actors) {
+      mctx.fillRect(Math.floor(a.x * miniScale), Math.floor(a.y * miniScale), 2, 2);
+    }
+  }
+
+  // viewport rectangle
+  const vx = wrap.scrollLeft * miniScale;
+  const vy = wrap.scrollTop * miniScale;
+  const vw = wrap.clientWidth * miniScale;
+  const vh = wrap.clientHeight * miniScale;
+  mctx.strokeStyle = 'rgba(255,220,120,0.95)';
+  mctx.lineWidth = 1;
+  mctx.strokeRect(Math.floor(vx) + .5, Math.floor(vy) + .5, Math.max(2, Math.floor(vw)), Math.max(2, Math.floor(vh)));
+}
+
+function moveViewportFromMini(clientX, clientY) {
+  const rect = mini.getBoundingClientRect();
+  const mx = Math.max(0, Math.min(rect.width, clientX - rect.left));
+  const my = Math.max(0, Math.min(rect.height, clientY - rect.top));
+  const worldX = mx / miniScale;
+  const worldY = my / miniScale;
+
+  wrap.scrollLeft = Math.max(0, Math.min(cv.width - wrap.clientWidth, worldX - wrap.clientWidth / 2));
+  wrap.scrollTop = Math.max(0, Math.min(cv.height - wrap.clientHeight, worldY - wrap.clientHeight / 2));
+  drawMiniMap();
+}
+
+cv.addEventListener('contextmenu', (e) => {
+  if (collisionEditMode) e.preventDefault();
+});
+
+let miniDragging = false;
+mini.addEventListener('pointerdown', (e) => {
+  miniDragging = true;
+  moveViewportFromMini(e.clientX, e.clientY);
+  e.stopPropagation();
+});
+window.addEventListener('pointermove', (e) => {
+  if (!miniDragging) return;
+  moveViewportFromMini(e.clientX, e.clientY);
+});
+window.addEventListener('pointerup', () => miniDragging = false);
+
+// game-view style panning (drag to move viewport)
+let panDragging = false;
+let panStartX = 0, panStartY = 0, panStartScrollLeft = 0, panStartScrollTop = 0;
+let panLastX = 0, panLastY = 0, panLastTs = 0;
+let panVx = 0, panVy = 0;
+wrap.addEventListener('pointerdown', (e) => {
+  if (e.target === mini) return;
+
+  if (collisionEditMode) {
+    const rect = cv.getBoundingClientRect();
+    const x = e.clientX - rect.left + wrap.scrollLeft;
+    const y = e.clientY - rect.top + wrap.scrollTop;
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    if (tx >= 0 && ty >= 0 && tx < COMPOSED.cols && ty < COMPOSED.rows) {
+      applyCollisionEditAtTile(tx, ty, e.button === 2 ? 'clear' : 'toggle');
+    }
+    e.preventDefault();
+    return;
+  }
+
+  if (isMobileView()) return;
+
+  panDragging = true;
+  panStartX = e.clientX;
+  panStartY = e.clientY;
+  panStartScrollLeft = wrap.scrollLeft;
+  panStartScrollTop = wrap.scrollTop;
+  panLastX = e.clientX;
+  panLastY = e.clientY;
+  panLastTs = performance.now();
+  panVx = 0;
+  panVy = 0;
+  wrap.setPointerCapture(e.pointerId);
+});
+wrap.addEventListener('pointermove', (e) => {
+  if (!panDragging) return;
+  const dx = e.clientX - panStartX;
+  const dy = e.clientY - panStartY;
+  wrap.scrollLeft = panStartScrollLeft - dx;
+  wrap.scrollTop = panStartScrollTop - dy;
+
+  const now = performance.now();
+  const dt = Math.max(1, now - panLastTs);
+  panVx = (e.clientX - panLastX) / dt;
+  panVy = (e.clientY - panLastY) / dt;
+  panLastX = e.clientX;
+  panLastY = e.clientY;
+  panLastTs = now;
+
+  drawMiniMap();
+});
+wrap.addEventListener('pointerup', (e) => {
+  panDragging = false;
+  try { wrap.releasePointerCapture(e.pointerId); } catch {}
+});
+wrap.addEventListener('pointercancel', () => { panDragging = false; });
+
+wrap.addEventListener('scroll', () => drawMiniMap());
+window.addEventListener('resize', () => {
+  staticDirty = true;
+  drawMiniMap();
+  draw();
+  focusMobileRoom();
+});
+
+function startLoop() {
+  loopStarted = true;
+  let last = performance.now();
+  const tick = (now) => {
+    const dt = now - last;
+    last = now;
+
+    // inertial camera movement after drag end
+    if (!panDragging) {
+      if (Math.abs(panVx) > 0.01 || Math.abs(panVy) > 0.01) {
+        wrap.scrollLeft -= panVx * dt * 22;
+        wrap.scrollTop -= panVy * dt * 22;
+        panVx *= 0.92;
+        panVy *= 0.92;
+      }
+    }
+
+    updateActors(dt, now);
+    draw();
+    drawMiniMap();
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+build();
+</script>
+</body>
+</html>

@@ -1,0 +1,1446 @@
+{
+  "version": "1.0",
+  "tileSize": 16,
+  "tilesets": {
+    "office1": {
+      "file": "B-C-D-E Office 1.png",
+      "imageWidth": 512,
+      "imageHeight": 512,
+      "spriteCount": 29,
+      "sprites": [
+        {
+          "x": 40,
+          "y": 0,
+          "w": 80,
+          "h": 46,
+          "id": "office1_0",
+          "name": "desk_small_brown_a"
+        },
+        {
+          "x": 136,
+          "y": 0,
+          "w": 80,
+          "h": 46,
+          "id": "office1_1",
+          "name": "desk_small_brown_b"
+        },
+        {
+          "x": 224,
+          "y": 0,
+          "w": 32,
+          "h": 16,
+          "id": "office1_2",
+          "name": "desk_long_mixed"
+        },
+        {
+          "x": 460,
+          "y": 14,
+          "w": 40,
+          "h": 18,
+          "id": "office1_3",
+          "name": "desk_with_drawer"
+        },
+        {
+          "x": 224,
+          "y": 24,
+          "w": 224,
+          "h": 40,
+          "id": "office1_4",
+          "name": "desk_row_group"
+        },
+        {
+          "x": 460,
+          "y": 46,
+          "w": 40,
+          "h": 18,
+          "id": "office1_5",
+          "name": "shelf_small_a"
+        },
+        {
+          "x": 8,
+          "y": 64,
+          "w": 80,
+          "h": 46,
+          "id": "office1_6",
+          "name": "shelf_small_b"
+        },
+        {
+          "x": 96,
+          "y": 64,
+          "w": 352,
+          "h": 64,
+          "id": "office1_7",
+          "name": "large_furniture_section"
+        },
+        {
+          "x": 450,
+          "y": 68,
+          "w": 60,
+          "h": 28,
+          "id": "office1_8",
+          "name": "office1_item_8"
+        },
+        {
+          "x": 450,
+          "y": 100,
+          "w": 60,
+          "h": 28,
+          "id": "office1_9",
+          "name": "office1_item_9"
+        },
+        {
+          "x": 0,
+          "y": 128,
+          "w": 64,
+          "h": 46,
+          "id": "office1_10",
+          "name": "office1_item_10"
+        },
+        {
+          "x": 0,
+          "y": 128,
+          "w": 256,
+          "h": 174,
+          "id": "office1_11",
+          "name": "office1_item_11"
+        },
+        {
+          "x": 354,
+          "y": 130,
+          "w": 58,
+          "h": 30,
+          "id": "office1_12",
+          "name": "office1_item_12"
+        },
+        {
+          "x": 418,
+          "y": 130,
+          "w": 58,
+          "h": 30,
+          "id": "office1_13",
+          "name": "office1_item_13"
+        },
+        {
+          "x": 480,
+          "y": 136,
+          "w": 32,
+          "h": 24,
+          "id": "office1_14",
+          "name": "office1_item_14"
+        },
+        {
+          "x": 256,
+          "y": 152,
+          "w": 96,
+          "h": 40,
+          "id": "office1_15",
+          "name": "office1_item_15"
+        },
+        {
+          "x": 480,
+          "y": 168,
+          "w": 32,
+          "h": 24,
+          "id": "office1_16",
+          "name": "office1_item_16"
+        },
+        {
+          "x": 364,
+          "y": 190,
+          "w": 40,
+          "h": 50,
+          "id": "office1_17",
+          "name": "office1_item_17"
+        },
+        {
+          "x": 428,
+          "y": 190,
+          "w": 40,
+          "h": 50,
+          "id": "office1_18",
+          "name": "office1_item_18"
+        },
+        {
+          "x": 480,
+          "y": 200,
+          "w": 32,
+          "h": 24,
+          "id": "office1_19",
+          "name": "office1_item_19"
+        },
+        {
+          "x": 264,
+          "y": 206,
+          "w": 80,
+          "h": 18,
+          "id": "office1_20",
+          "name": "office1_item_20"
+        },
+        {
+          "x": 480,
+          "y": 232,
+          "w": 32,
+          "h": 24,
+          "id": "office1_21",
+          "name": "office1_item_21"
+        },
+        {
+          "x": 264,
+          "y": 238,
+          "w": 80,
+          "h": 18,
+          "id": "office1_22",
+          "name": "office1_item_22"
+        },
+        {
+          "x": 354,
+          "y": 276,
+          "w": 60,
+          "h": 60,
+          "id": "office1_23",
+          "name": "office1_item_23"
+        },
+        {
+          "x": 418,
+          "y": 276,
+          "w": 60,
+          "h": 60,
+          "id": "office1_24",
+          "name": "office1_item_24"
+        },
+        {
+          "x": 264,
+          "y": 286,
+          "w": 80,
+          "h": 50,
+          "id": "office1_25",
+          "name": "office1_item_25"
+        },
+        {
+          "x": 0,
+          "y": 320,
+          "w": 448,
+          "h": 192,
+          "id": "office1_26",
+          "name": "office1_item_26"
+        },
+        {
+          "x": 386,
+          "y": 370,
+          "w": 58,
+          "h": 62,
+          "id": "office1_27",
+          "name": "office1_item_27"
+        },
+        {
+          "x": 450,
+          "y": 370,
+          "w": 58,
+          "h": 62,
+          "id": "office1_28",
+          "name": "office1_item_28"
+        }
+      ]
+    },
+    "office2": {
+      "file": "B-C-D-E Office 2.png",
+      "imageWidth": 512,
+      "imageHeight": 512,
+      "spriteCount": 108,
+      "sprites": [
+        {
+          "x": 4,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_0",
+          "name": "chairs_monitors_top"
+        },
+        {
+          "x": 68,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_1",
+          "name": "locker_column"
+        },
+        {
+          "x": 100,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_2",
+          "name": "vending_machine"
+        },
+        {
+          "x": 132,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_3",
+          "name": "pc_towers"
+        },
+        {
+          "x": 196,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_4",
+          "name": "board_row"
+        },
+        {
+          "x": 228,
+          "y": 4,
+          "w": 24,
+          "h": 32,
+          "id": "office2_5",
+          "name": "color_dot"
+        },
+        {
+          "x": 36,
+          "y": 8,
+          "w": 24,
+          "h": 28,
+          "id": "office2_6",
+          "name": "wall_items"
+        },
+        {
+          "x": 164,
+          "y": 8,
+          "w": 24,
+          "h": 28,
+          "id": "office2_7",
+          "name": "lower_furniture_section"
+        },
+        {
+          "x": 458,
+          "y": 16,
+          "w": 46,
+          "h": 64,
+          "id": "office2_8",
+          "name": "office2_item_8"
+        },
+        {
+          "x": 384,
+          "y": 18,
+          "w": 64,
+          "h": 62,
+          "id": "office2_9",
+          "name": "office2_item_9"
+        },
+        {
+          "x": 288,
+          "y": 22,
+          "w": 24,
+          "h": 58,
+          "id": "office2_10",
+          "name": "office2_item_10"
+        },
+        {
+          "x": 328,
+          "y": 22,
+          "w": 24,
+          "h": 58,
+          "id": "office2_11",
+          "name": "office2_item_11"
+        },
+        {
+          "x": 268,
+          "y": 50,
+          "w": 16,
+          "h": 26,
+          "id": "office2_12",
+          "name": "office2_item_12"
+        },
+        {
+          "x": 356,
+          "y": 50,
+          "w": 16,
+          "h": 26,
+          "id": "office2_13",
+          "name": "office2_item_13"
+        },
+        {
+          "x": 36,
+          "y": 64,
+          "w": 24,
+          "h": 64,
+          "id": "office2_14",
+          "name": "office2_item_14"
+        },
+        {
+          "x": 68,
+          "y": 64,
+          "w": 24,
+          "h": 64,
+          "id": "office2_15",
+          "name": "office2_item_15"
+        },
+        {
+          "x": 100,
+          "y": 64,
+          "w": 24,
+          "h": 64,
+          "id": "office2_16",
+          "name": "office2_item_16"
+        },
+        {
+          "x": 4,
+          "y": 74,
+          "w": 24,
+          "h": 26,
+          "id": "office2_17",
+          "name": "office2_item_17"
+        },
+        {
+          "x": 128,
+          "y": 86,
+          "w": 128,
+          "h": 32,
+          "id": "office2_18",
+          "name": "office2_item_18"
+        },
+        {
+          "x": 458,
+          "y": 102,
+          "w": 16,
+          "h": 16,
+          "id": "office2_19",
+          "name": "office2_item_19"
+        },
+        {
+          "x": 482,
+          "y": 102,
+          "w": 16,
+          "h": 16,
+          "id": "office2_20",
+          "name": "office2_item_20"
+        },
+        {
+          "x": 422,
+          "y": 106,
+          "w": 16,
+          "h": 16,
+          "id": "office2_21",
+          "name": "office2_item_21"
+        },
+        {
+          "x": 262,
+          "y": 120,
+          "w": 26,
+          "h": 38,
+          "id": "office2_22",
+          "name": "office2_item_22"
+        },
+        {
+          "x": 326,
+          "y": 120,
+          "w": 26,
+          "h": 38,
+          "id": "office2_23",
+          "name": "office2_item_23"
+        },
+        {
+          "x": 390,
+          "y": 122,
+          "w": 20,
+          "h": 28,
+          "id": "office2_24",
+          "name": "office2_item_24"
+        },
+        {
+          "x": 422,
+          "y": 134,
+          "w": 16,
+          "h": 16,
+          "id": "office2_25",
+          "name": "office2_item_25"
+        },
+        {
+          "x": 458,
+          "y": 138,
+          "w": 16,
+          "h": 16,
+          "id": "office2_26",
+          "name": "office2_item_26"
+        },
+        {
+          "x": 290,
+          "y": 140,
+          "w": 16,
+          "h": 16,
+          "id": "office2_27",
+          "name": "office2_item_27"
+        },
+        {
+          "x": 354,
+          "y": 140,
+          "w": 16,
+          "h": 16,
+          "id": "office2_28",
+          "name": "office2_item_28"
+        },
+        {
+          "x": 0,
+          "y": 150,
+          "w": 64,
+          "h": 32,
+          "id": "office2_29",
+          "name": "office2_item_29"
+        },
+        {
+          "x": 70,
+          "y": 150,
+          "w": 50,
+          "h": 30,
+          "id": "office2_30",
+          "name": "office2_item_30"
+        },
+        {
+          "x": 134,
+          "y": 150,
+          "w": 50,
+          "h": 30,
+          "id": "office2_31",
+          "name": "office2_item_31"
+        },
+        {
+          "x": 198,
+          "y": 150,
+          "w": 50,
+          "h": 30,
+          "id": "office2_32",
+          "name": "office2_item_32"
+        },
+        {
+          "x": 386,
+          "y": 166,
+          "w": 16,
+          "h": 18,
+          "id": "office2_33",
+          "name": "office2_item_33"
+        },
+        {
+          "x": 418,
+          "y": 166,
+          "w": 16,
+          "h": 18,
+          "id": "office2_34",
+          "name": "office2_item_34"
+        },
+        {
+          "x": 450,
+          "y": 166,
+          "w": 16,
+          "h": 18,
+          "id": "office2_35",
+          "name": "office2_item_35"
+        },
+        {
+          "x": 482,
+          "y": 166,
+          "w": 16,
+          "h": 18,
+          "id": "office2_36",
+          "name": "office2_item_36"
+        },
+        {
+          "x": 270,
+          "y": 168,
+          "w": 16,
+          "h": 18,
+          "id": "office2_37",
+          "name": "office2_item_37"
+        },
+        {
+          "x": 302,
+          "y": 168,
+          "w": 16,
+          "h": 18,
+          "id": "office2_38",
+          "name": "office2_item_38"
+        },
+        {
+          "x": 334,
+          "y": 168,
+          "w": 16,
+          "h": 18,
+          "id": "office2_39",
+          "name": "office2_item_39"
+        },
+        {
+          "x": 366,
+          "y": 168,
+          "w": 16,
+          "h": 18,
+          "id": "office2_40",
+          "name": "office2_item_40"
+        },
+        {
+          "x": 258,
+          "y": 208,
+          "w": 28,
+          "h": 32,
+          "id": "office2_41",
+          "name": "office2_item_41"
+        },
+        {
+          "x": 288,
+          "y": 208,
+          "w": 14,
+          "h": 32,
+          "id": "office2_42",
+          "name": "office2_item_42"
+        },
+        {
+          "x": 322,
+          "y": 208,
+          "w": 28,
+          "h": 32,
+          "id": "office2_43",
+          "name": "office2_item_43"
+        },
+        {
+          "x": 352,
+          "y": 208,
+          "w": 14,
+          "h": 32,
+          "id": "office2_44",
+          "name": "office2_item_44"
+        },
+        {
+          "x": 384,
+          "y": 208,
+          "w": 32,
+          "h": 30,
+          "id": "office2_45",
+          "name": "office2_item_45"
+        },
+        {
+          "x": 448,
+          "y": 208,
+          "w": 32,
+          "h": 30,
+          "id": "office2_46",
+          "name": "office2_item_46"
+        },
+        {
+          "x": 160,
+          "y": 214,
+          "w": 30,
+          "h": 30,
+          "id": "office2_47",
+          "name": "office2_item_47"
+        },
+        {
+          "x": 194,
+          "y": 214,
+          "w": 28,
+          "h": 30,
+          "id": "office2_48",
+          "name": "office2_item_48"
+        },
+        {
+          "x": 226,
+          "y": 214,
+          "w": 28,
+          "h": 30,
+          "id": "office2_49",
+          "name": "office2_item_49"
+        },
+        {
+          "x": 4,
+          "y": 218,
+          "w": 22,
+          "h": 22,
+          "id": "office2_50",
+          "name": "office2_item_50"
+        },
+        {
+          "x": 36,
+          "y": 218,
+          "w": 22,
+          "h": 22,
+          "id": "office2_51",
+          "name": "office2_item_51"
+        },
+        {
+          "x": 68,
+          "y": 218,
+          "w": 22,
+          "h": 22,
+          "id": "office2_52",
+          "name": "office2_item_52"
+        },
+        {
+          "x": 100,
+          "y": 218,
+          "w": 22,
+          "h": 22,
+          "id": "office2_53",
+          "name": "office2_item_53"
+        },
+        {
+          "x": 132,
+          "y": 218,
+          "w": 22,
+          "h": 22,
+          "id": "office2_54",
+          "name": "office2_item_54"
+        },
+        {
+          "x": 420,
+          "y": 222,
+          "w": 16,
+          "h": 16,
+          "id": "office2_55",
+          "name": "office2_item_55"
+        },
+        {
+          "x": 484,
+          "y": 222,
+          "w": 16,
+          "h": 16,
+          "id": "office2_56",
+          "name": "office2_item_56"
+        },
+        {
+          "x": 320,
+          "y": 258,
+          "w": 26,
+          "h": 34,
+          "id": "office2_57",
+          "name": "office2_item_57"
+        },
+        {
+          "x": 358,
+          "y": 258,
+          "w": 26,
+          "h": 34,
+          "id": "office2_58",
+          "name": "office2_item_58"
+        },
+        {
+          "x": 486,
+          "y": 264,
+          "w": 18,
+          "h": 16,
+          "id": "office2_59",
+          "name": "office2_item_59"
+        },
+        {
+          "x": 2,
+          "y": 278,
+          "w": 60,
+          "h": 32,
+          "id": "office2_60",
+          "name": "office2_item_60"
+        },
+        {
+          "x": 66,
+          "y": 278,
+          "w": 60,
+          "h": 32,
+          "id": "office2_61",
+          "name": "office2_item_61"
+        },
+        {
+          "x": 130,
+          "y": 278,
+          "w": 28,
+          "h": 32,
+          "id": "office2_62",
+          "name": "office2_item_62"
+        },
+        {
+          "x": 162,
+          "y": 278,
+          "w": 28,
+          "h": 32,
+          "id": "office2_63",
+          "name": "office2_item_63"
+        },
+        {
+          "x": 194,
+          "y": 278,
+          "w": 28,
+          "h": 32,
+          "id": "office2_64",
+          "name": "office2_item_64"
+        },
+        {
+          "x": 226,
+          "y": 278,
+          "w": 28,
+          "h": 32,
+          "id": "office2_65",
+          "name": "office2_item_65"
+        },
+        {
+          "x": 260,
+          "y": 282,
+          "w": 24,
+          "h": 34,
+          "id": "office2_66",
+          "name": "office2_item_66"
+        },
+        {
+          "x": 292,
+          "y": 282,
+          "w": 24,
+          "h": 34,
+          "id": "office2_67",
+          "name": "office2_item_67"
+        },
+        {
+          "x": 404,
+          "y": 284,
+          "w": 24,
+          "h": 20,
+          "id": "office2_68",
+          "name": "office2_item_68"
+        },
+        {
+          "x": 456,
+          "y": 284,
+          "w": 16,
+          "h": 18,
+          "id": "office2_69",
+          "name": "office2_item_69"
+        },
+        {
+          "x": 488,
+          "y": 296,
+          "w": 18,
+          "h": 16,
+          "id": "office2_70",
+          "name": "office2_item_70"
+        },
+        {
+          "x": 416,
+          "y": 320,
+          "w": 14,
+          "h": 32,
+          "id": "office2_71",
+          "name": "office2_item_71"
+        },
+        {
+          "x": 366,
+          "y": 324,
+          "w": 48,
+          "h": 58,
+          "id": "office2_72",
+          "name": "office2_item_72"
+        },
+        {
+          "x": 484,
+          "y": 324,
+          "w": 24,
+          "h": 20,
+          "id": "office2_73",
+          "name": "office2_item_73"
+        },
+        {
+          "x": 462,
+          "y": 328,
+          "w": 16,
+          "h": 16,
+          "id": "office2_74",
+          "name": "office2_item_74"
+        },
+        {
+          "x": 364,
+          "y": 334,
+          "w": 16,
+          "h": 16,
+          "id": "office2_75",
+          "name": "office2_item_75"
+        },
+        {
+          "x": 70,
+          "y": 338,
+          "w": 52,
+          "h": 38,
+          "id": "office2_76",
+          "name": "office2_item_76"
+        },
+        {
+          "x": 134,
+          "y": 338,
+          "w": 52,
+          "h": 38,
+          "id": "office2_77",
+          "name": "office2_item_77"
+        },
+        {
+          "x": 194,
+          "y": 338,
+          "w": 60,
+          "h": 40,
+          "id": "office2_78",
+          "name": "office2_item_78"
+        },
+        {
+          "x": 304,
+          "y": 338,
+          "w": 32,
+          "h": 30,
+          "id": "office2_79",
+          "name": "office2_item_79"
+        },
+        {
+          "x": 10,
+          "y": 340,
+          "w": 44,
+          "h": 34,
+          "id": "office2_80",
+          "name": "office2_item_80"
+        },
+        {
+          "x": 270,
+          "y": 340,
+          "w": 14,
+          "h": 32,
+          "id": "office2_81",
+          "name": "office2_item_81"
+        },
+        {
+          "x": 432,
+          "y": 352,
+          "w": 32,
+          "h": 30,
+          "id": "office2_82",
+          "name": "office2_item_82"
+        },
+        {
+          "x": 484,
+          "y": 356,
+          "w": 26,
+          "h": 28,
+          "id": "office2_83",
+          "name": "office2_item_83"
+        },
+        {
+          "x": 132,
+          "y": 386,
+          "w": 26,
+          "h": 30,
+          "id": "office2_84",
+          "name": "office2_item_84"
+        },
+        {
+          "x": 164,
+          "y": 386,
+          "w": 26,
+          "h": 30,
+          "id": "office2_85",
+          "name": "office2_item_85"
+        },
+        {
+          "x": 198,
+          "y": 386,
+          "w": 22,
+          "h": 30,
+          "id": "office2_86",
+          "name": "office2_item_86"
+        },
+        {
+          "x": 230,
+          "y": 386,
+          "w": 22,
+          "h": 30,
+          "id": "office2_87",
+          "name": "office2_item_87"
+        },
+        {
+          "x": 70,
+          "y": 398,
+          "w": 20,
+          "h": 32,
+          "id": "office2_88",
+          "name": "office2_item_88"
+        },
+        {
+          "x": 102,
+          "y": 398,
+          "w": 20,
+          "h": 36,
+          "id": "office2_89",
+          "name": "office2_item_89"
+        },
+        {
+          "x": 2,
+          "y": 402,
+          "w": 60,
+          "h": 40,
+          "id": "office2_90",
+          "name": "office2_item_90"
+        },
+        {
+          "x": 292,
+          "y": 404,
+          "w": 26,
+          "h": 44,
+          "id": "office2_91",
+          "name": "office2_item_91"
+        },
+        {
+          "x": 326,
+          "y": 404,
+          "w": 52,
+          "h": 44,
+          "id": "office2_92",
+          "name": "office2_item_92"
+        },
+        {
+          "x": 390,
+          "y": 404,
+          "w": 52,
+          "h": 44,
+          "id": "office2_93",
+          "name": "office2_item_93"
+        },
+        {
+          "x": 260,
+          "y": 406,
+          "w": 26,
+          "h": 42,
+          "id": "office2_94",
+          "name": "office2_item_94"
+        },
+        {
+          "x": 454,
+          "y": 408,
+          "w": 52,
+          "h": 40,
+          "id": "office2_95",
+          "name": "office2_item_95"
+        },
+        {
+          "x": 132,
+          "y": 418,
+          "w": 26,
+          "h": 30,
+          "id": "office2_96",
+          "name": "office2_item_96"
+        },
+        {
+          "x": 164,
+          "y": 418,
+          "w": 26,
+          "h": 30,
+          "id": "office2_97",
+          "name": "office2_item_97"
+        },
+        {
+          "x": 198,
+          "y": 418,
+          "w": 22,
+          "h": 30,
+          "id": "office2_98",
+          "name": "office2_item_98"
+        },
+        {
+          "x": 230,
+          "y": 418,
+          "w": 22,
+          "h": 30,
+          "id": "office2_99",
+          "name": "office2_item_99"
+        },
+        {
+          "x": 10,
+          "y": 452,
+          "w": 44,
+          "h": 24,
+          "id": "office2_100",
+          "name": "office2_item_100"
+        },
+        {
+          "x": 74,
+          "y": 452,
+          "w": 44,
+          "h": 24,
+          "id": "office2_101",
+          "name": "office2_item_101"
+        },
+        {
+          "x": 138,
+          "y": 452,
+          "w": 44,
+          "h": 24,
+          "id": "office2_102",
+          "name": "office2_item_102"
+        },
+        {
+          "x": 216,
+          "y": 452,
+          "w": 32,
+          "h": 26,
+          "id": "office2_103",
+          "name": "office2_item_103"
+        },
+        {
+          "x": 10,
+          "y": 484,
+          "w": 44,
+          "h": 24,
+          "id": "office2_104",
+          "name": "office2_item_104"
+        },
+        {
+          "x": 74,
+          "y": 484,
+          "w": 44,
+          "h": 24,
+          "id": "office2_105",
+          "name": "office2_item_105"
+        },
+        {
+          "x": 138,
+          "y": 484,
+          "w": 44,
+          "h": 24,
+          "id": "office2_106",
+          "name": "office2_item_106"
+        },
+        {
+          "x": 216,
+          "y": 484,
+          "w": 32,
+          "h": 26,
+          "id": "office2_107",
+          "name": "office2_item_107"
+        }
+      ]
+    },
+    "floors": {
+      "file": "A2 Office Floors.png",
+      "imageWidth": 512,
+      "imageHeight": 384,
+      "spriteCount": 26,
+      "sprites": [
+        {
+          "id": "floor_0",
+          "name": "floor_dark_charcoal",
+          "x": 0,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_1",
+          "name": "floor_light_gray",
+          "x": 64,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_2",
+          "name": "floor_sage_green",
+          "x": 128,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_3",
+          "name": "floor_steel_blue",
+          "x": 192,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_4",
+          "name": "floor_warm_tan",
+          "x": 256,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_5",
+          "name": "floor_slate_blue",
+          "x": 320,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_6",
+          "name": "floor_sand_beige",
+          "x": 384,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_7",
+          "name": "floor_seafoam",
+          "x": 448,
+          "y": 0,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_8",
+          "name": "floor_gray_xpattern",
+          "x": 0,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_9",
+          "name": "floor_teal_xpattern",
+          "x": 64,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_10",
+          "name": "floor_sage_xpattern",
+          "x": 128,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_11",
+          "name": "floor_blue_xpattern",
+          "x": 192,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_12",
+          "name": "floor_tan_xpattern",
+          "x": 256,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_13",
+          "name": "floor_slate_xpattern",
+          "x": 320,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_14",
+          "name": "floor_beige_xpattern",
+          "x": 384,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_15",
+          "name": "floor_sea_xpattern",
+          "x": 448,
+          "y": 64,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_16",
+          "name": "floor_sand_dot",
+          "x": 0,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_17",
+          "name": "floor_dot_b",
+          "x": 64,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_18",
+          "name": "floor_tile_18",
+          "x": 128,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_19",
+          "name": "floor_tile_19",
+          "x": 192,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_20",
+          "name": "floor_tile_20",
+          "x": 256,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_21",
+          "name": "floor_tile_21",
+          "x": 320,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_22",
+          "name": "floor_tile_22",
+          "x": 384,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_23",
+          "name": "floor_tile_23",
+          "x": 448,
+          "y": 128,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_24",
+          "name": "floor_tile_24",
+          "x": 0,
+          "y": 192,
+          "w": 64,
+          "h": 64
+        },
+        {
+          "id": "floor_25",
+          "name": "floor_tile_25",
+          "x": 0,
+          "y": 256,
+          "w": 64,
+          "h": 64
+        }
+      ]
+    },
+    "walls": {
+      "file": "A4 Office Walls.png",
+      "imageWidth": 512,
+      "imageHeight": 480,
+      "spriteCount": 13,
+      "sprites": [
+        {
+          "x": 20,
+          "y": 0,
+          "w": 12,
+          "h": 172,
+          "id": "wall_0",
+          "name": "wall_item_0"
+        },
+        {
+          "x": 52,
+          "y": 0,
+          "w": 88,
+          "h": 172,
+          "id": "wall_1",
+          "name": "wall_item_1"
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 320,
+          "h": 480,
+          "id": "wall_2",
+          "name": "wall_item_2"
+        },
+        {
+          "x": 160,
+          "y": 0,
+          "w": 12,
+          "h": 172,
+          "id": "wall_3",
+          "name": "wall_item_3"
+        },
+        {
+          "x": 20,
+          "y": 192,
+          "w": 12,
+          "h": 12,
+          "id": "wall_4",
+          "name": "wall_item_4"
+        },
+        {
+          "x": 52,
+          "y": 192,
+          "w": 88,
+          "h": 12,
+          "id": "wall_5",
+          "name": "wall_item_5"
+        },
+        {
+          "x": 160,
+          "y": 192,
+          "w": 12,
+          "h": 12,
+          "id": "wall_6",
+          "name": "wall_item_6"
+        },
+        {
+          "x": 20,
+          "y": 224,
+          "w": 12,
+          "h": 12,
+          "id": "wall_7",
+          "name": "wall_item_7"
+        },
+        {
+          "x": 52,
+          "y": 224,
+          "w": 88,
+          "h": 12,
+          "id": "wall_8",
+          "name": "wall_item_8"
+        },
+        {
+          "x": 160,
+          "y": 224,
+          "w": 12,
+          "h": 12,
+          "id": "wall_9",
+          "name": "wall_item_9"
+        },
+        {
+          "x": 20,
+          "y": 256,
+          "w": 12,
+          "h": 160,
+          "id": "wall_10",
+          "name": "wall_item_10"
+        },
+        {
+          "x": 52,
+          "y": 256,
+          "w": 24,
+          "h": 160,
+          "id": "wall_11",
+          "name": "wall_item_11"
+        },
+        {
+          "x": 96,
+          "y": 256,
+          "w": 12,
+          "h": 160,
+          "id": "wall_12",
+          "name": "wall_item_12"
+        }
+      ]
+    }
+  }
+}

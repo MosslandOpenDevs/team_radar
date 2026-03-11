@@ -20,6 +20,20 @@ const STARTUP_ATTENDANCE_BACKFILL = String(process.env.STARTUP_ATTENDANCE_BACKFI
 const ATTENDANCE_BACKFILL_DAYS_KST = Math.max(1, Number(process.env.ATTENDANCE_BACKFILL_DAYS_KST || 1));
 const STARTUP_WORK_BACKFILL = String(process.env.STARTUP_WORK_BACKFILL || 'true').toLowerCase() !== 'false';
 const WORK_BACKFILL_DAYS = Math.max(1, Number(process.env.WORK_BACKFILL_DAYS || 7));
+const DASHBOARD_API_BASE = String(process.env.DASHBOARD_API_BASE || `http://localhost:${Number(process.env.DASHBOARD_PORT || 3100)}`).replace(/\/$/, '');
+const ATTENDANCE_PERIODIC_RESYNC_ENABLED = String(process.env.ATTENDANCE_PERIODIC_RESYNC_ENABLED || 'true').toLowerCase() !== 'false';
+const ATTENDANCE_PERIODIC_RESYNC_MINUTES = Math.max(5, Number(process.env.ATTENDANCE_PERIODIC_RESYNC_MINUTES || 60));
+const ATTENDANCE_PERIODIC_RESYNC_DAYS = Math.max(1, Math.min(30, Number(process.env.ATTENDANCE_PERIODIC_RESYNC_DAYS || 1)));
+const WORK_SUMMARY_ENABLED = String(process.env.WORK_SUMMARY_ENABLED || 'true').toLowerCase() !== 'false';
+const WORK_SUMMARY_MAX_CHARS = Math.max(12, Number(process.env.WORK_SUMMARY_MAX_CHARS || 30));
+const WORK_SUMMARY_MIN_CHARS = Math.max(1, Number(process.env.WORK_SUMMARY_MIN_CHARS || 20));
+const WORK_SUMMARY_BACKFILL_ON_STARTUP = String(process.env.WORK_SUMMARY_BACKFILL_ON_STARTUP || 'true').toLowerCase() !== 'false';
+const WORK_SUMMARY_BACKFILL_LIMIT = Math.max(10, Number(process.env.WORK_SUMMARY_BACKFILL_LIMIT || 300));
+const WORK_SUMMARY_PROVIDER = String(process.env.WORK_SUMMARY_PROVIDER || 'ollama').toLowerCase().trim();
+const OLLAMA_API_BASE = String(process.env.OLLAMA_API_BASE || 'http://127.0.0.1:11434').replace(/\/$/, '');
+const OLLAMA_SUMMARY_MODEL = String(process.env.OLLAMA_SUMMARY_MODEL || 'qwen2.5:1.5b').trim();
+const GEMINI_API_KEY = String(process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_SUMMARY_MODEL = String(process.env.GEMINI_SUMMARY_MODEL || 'gemma-3-4b-it').trim();
 
 // 근태 채널에서 처리할 봇 ID 및 허용 상태
 const WANTEDSPACE_BOT_ID = process.env.WANTEDSPACE_BOT_ID || ''; // wantedspaceBotV2 - 출근/퇴근
@@ -97,6 +111,17 @@ client.once(Events.ClientReady, async (c) => {
     }
     console.log(`[BOOT] work backfill imported=${imported} (${WORK_BACKFILL_DAYS} day)`);
   }
+
+  if (WORK_SUMMARY_BACKFILL_ON_STARTUP) {
+    const updated = await backfillWorkSummaries(WORK_SUMMARY_BACKFILL_LIMIT);
+    if (updated > 0) {
+      touchMeta(new Date().toISOString());
+      db.write();
+    }
+    console.log(`[BOOT] work summary backfill updated=${updated} (limit=${WORK_SUMMARY_BACKFILL_LIMIT})`);
+  }
+
+  setupPeriodicAttendanceResync();
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -211,10 +236,12 @@ client.on(Events.MessageCreate, async (message) => {
   if (workSet.has(message.channelId)) {
     const state = parseWorkState(message.content);
     const summary = compact(message.content);
+    const summaryShort = await summarizeWorkText(summary);
 
     user.work = {
       state,
       summary,
+      summaryShort,
       channelId: message.channelId,
       messageId: message.id,
       at: message.createdAt.toISOString(),
@@ -224,6 +251,7 @@ client.on(Events.MessageCreate, async (message) => {
     user.workLogs.unshift({
       state,
       summary,
+      summaryShort,
       channelId: message.channelId,
       messageId: message.id,
       at: message.createdAt.toISOString(),
@@ -236,6 +264,7 @@ client.on(Events.MessageCreate, async (message) => {
       kind: 'work',
       state,
       summary,
+      summaryShort,
       channelId: message.channelId,
       messageId: message.id,
       at: message.createdAt.toISOString(),
@@ -262,6 +291,138 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.login(BOT_TOKEN);
+
+function setupPeriodicAttendanceResync() {
+  if (!ATTENDANCE_PERIODIC_RESYNC_ENABLED) {
+    console.log('[RESYNC] periodic attendance resync disabled');
+    return;
+  }
+
+  const intervalMs = ATTENDANCE_PERIODIC_RESYNC_MINUTES * 60 * 1000;
+  let running = false;
+
+  const runOnce = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const res = await fetch(`${DASHBOARD_API_BASE}/api/attendance/reload-scheduled`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: ATTENDANCE_PERIODIC_RESYNC_DAYS }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        console.warn(`[RESYNC] reload-scheduled failed: ${res.status} ${text.slice(0, 200)}`);
+      } else {
+        console.log(`[RESYNC] reload-scheduled ok: ${text.slice(0, 200)}`);
+      }
+    } catch (err) {
+      console.warn(`[RESYNC] reload-scheduled error: ${err.message}`);
+    } finally {
+      running = false;
+    }
+  };
+
+  setTimeout(runOnce, 30_000);
+  setInterval(runOnce, intervalMs);
+  console.log(`[RESYNC] enabled every ${ATTENDANCE_PERIODIC_RESYNC_MINUTES}m (days=${ATTENDANCE_PERIODIC_RESYNC_DAYS}, api=${DASHBOARD_API_BASE})`);
+}
+
+async function summarizeWorkText(text) {
+  const raw = compact(text || '');
+  if (!raw) return '';
+  if (!WORK_SUMMARY_ENABLED) return clampSummary(raw);
+  if (raw.length < WORK_SUMMARY_MIN_CHARS) return clampSummary(raw);
+
+  const prompt = `아래 업무 메시지를 한국어 1문장, 30자 이하로 요약하라.
+규칙:
+- 고유명사/개인정보/URL 제거
+- 과장/추측 금지
+- 의미가 불명확하면 핵심 키워드만 간결히
+- 출력은 요약 문장만
+원문: ${raw}`;
+
+  if (WORK_SUMMARY_PROVIDER === 'ollama') {
+    try {
+      const res = await fetch(`${OLLAMA_API_BASE}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_SUMMARY_MODEL,
+          prompt,
+          stream: false,
+          options: { temperature: 0.2, num_predict: 80 },
+        }),
+      });
+      if (!res.ok) return clampSummary(raw);
+      const data = await res.json();
+      const out = compact(data?.response || '');
+      return clampSummary(out || raw);
+    } catch {
+      return clampSummary(raw);
+    }
+  }
+
+  if (WORK_SUMMARY_PROVIDER === 'gemini' && GEMINI_API_KEY) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_SUMMARY_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 80 },
+        }),
+      });
+      if (!res.ok) return clampSummary(raw);
+      const data = await res.json();
+      const out = compact(data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join(' ') || '');
+      return clampSummary(out || raw);
+    } catch {
+      return clampSummary(raw);
+    }
+  }
+
+  return clampSummary(raw);
+}
+
+function clampSummary(text) {
+  const s = compact(String(text || '').replace(/\s+/g, ' '));
+  if (s.length <= WORK_SUMMARY_MAX_CHARS) return s;
+  return `${s.slice(0, WORK_SUMMARY_MAX_CHARS - 1)}…`;
+}
+
+async function backfillWorkSummaries(limit = 300) {
+  if (!WORK_SUMMARY_ENABLED) return 0;
+
+  const target = [...(db.data.events || [])]
+    .filter((e) => e.kind === 'work' && e.summary && !e.summaryShort)
+    .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())
+    .slice(0, limit);
+
+  let updated = 0;
+  for (const e of target) {
+    const short = await summarizeWorkText(e.summary || '');
+    if (!short) continue;
+    e.summaryShort = short;
+
+    for (const u of db.data.users || []) {
+      if (u?.work?.messageId === e.messageId) u.work.summaryShort = short;
+      if (Array.isArray(u?.workLogs)) {
+        for (const w of u.workLogs) {
+          if (w?.messageId === e.messageId) w.summaryShort = short;
+        }
+      }
+    }
+
+    if (pgStore.pgEnabled) {
+      await pgStore.insertEvent({ ...e, raw_payload: { ...(e.raw_payload || {}), summaryShort: short } }).catch(() => null);
+    }
+
+    updated += 1;
+  }
+
+  return updated;
+}
 
 async function startupBackfillAttendance(client, startUtc, endUtc) {
   let imported = 0;
@@ -411,6 +572,7 @@ async function startupBackfillWork(client, startUtc, endUtc) {
         const displayName = msg.member?.displayName || msg.author.globalName || msg.author.username;
         const summary = compact(msg.content || '');
         const state = parseWorkState(summary);
+        const summaryShort = clampSummary(summary);
 
         const user = getOrCreateUser(userId, displayName);
         user.displayName = displayName;
@@ -418,6 +580,7 @@ async function startupBackfillWork(client, startUtc, endUtc) {
         user.work = {
           state,
           summary,
+          summaryShort,
           channelId: msg.channelId,
           messageId: msg.id,
           at: msg.createdAt.toISOString(),
@@ -426,6 +589,7 @@ async function startupBackfillWork(client, startUtc, endUtc) {
         user.workLogs.unshift({
           state,
           summary,
+          summaryShort,
           channelId: msg.channelId,
           messageId: msg.id,
           at: msg.createdAt.toISOString(),
@@ -440,6 +604,7 @@ async function startupBackfillWork(client, startUtc, endUtc) {
             kind: 'work',
             state,
             summary,
+            summaryShort,
             channelId: msg.channelId,
             messageId: msg.id,
             at: msg.createdAt.toISOString(),
@@ -741,7 +906,7 @@ function extractAttendanceName(text) {
   if (!t) return null;
 
   // 임베드/마크다운 기호 제거 (굵게, 백틱, 괄호 등)
-  const cleaned = t.replace(/[*_`~\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = t.replace(/[*_`~\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
 
   // 예: "3월 4일(수) 이상민 ... 출근했습니다." / "... 퇴근했습니다."
   const dated = cleaned.match(/^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12})/);

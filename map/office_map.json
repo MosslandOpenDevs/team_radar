@@ -1,0 +1,112 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Open Office Map",
+    "tileSize": 16,
+    "scale": 3,
+    "gridWidth": 30,
+    "gridHeight": 22
+  },
+  "zones": [
+    {
+      "id": "team_a",
+      "label": "TEAM A",
+      "x": 1, "y": 1, "w": 16, "h": 12,
+      "floor": "floor_1",
+      "color": "rgba(100,150,220,0.18)"
+    },
+    {
+      "id": "meeting",
+      "label": "MEETING ROOM",
+      "x": 18, "y": 1, "w": 11, "h": 12,
+      "floor": "floor_4",
+      "color": "rgba(200,170,90,0.18)"
+    },
+    {
+      "id": "lounge",
+      "label": "LOUNGE",
+      "x": 1, "y": 14, "w": 21, "h": 7,
+      "floor": "floor_2",
+      "color": "rgba(100,170,100,0.18)"
+    },
+    {
+      "id": "printer_corner",
+      "label": "PRINTER CORNER",
+      "x": 22, "y": 14, "w": 7, "h": 7,
+      "floor": "floor_5",
+      "color": "rgba(140,110,90,0.18)"
+    }
+  ],
+  "walls": [
+    {"x": 0,  "y": 0,  "w": 30, "h": 1,  "note": "top wall"},
+    {"x": 0,  "y": 21, "w": 30, "h": 1,  "note": "bottom wall"},
+    {"x": 0,  "y": 0,  "w": 1,  "h": 22, "note": "left wall"},
+    {"x": 29, "y": 0,  "w": 1,  "h": 22, "note": "right wall"},
+    {"x": 17, "y": 1,  "w": 1,  "h": 12, "note": "room divider vertical"},
+    {"x": 1,  "y": 13, "w": 28, "h": 1,  "note": "floor divider horizontal"},
+    {"x": 22, "y": 13, "w": 1,  "h": 9,  "note": "printer zone divider"}
+  ],
+  "objects": [
+    {"layer": 3, "ts": "o1", "sx": 450, "sy":  68, "sw": 60, "sh": 28, "tx":  1, "ty":  2, "name": "벽면 선반"},
+    {"layer": 3, "ts": "o1", "sx": 450, "sy": 100, "sw": 60, "sh": 28, "tx":  1, "ty":  4, "name": "벽면 선반"},
+    {"layer": 3, "ts": "o1", "sx": 450, "sy":  68, "sw": 60, "sh": 28, "tx":  1, "ty":  6, "name": "벽면 선반"},
+    {"layer": 3, "ts": "o1", "sx": 450, "sy": 100, "sw": 60, "sh": 28, "tx":  1, "ty":  8, "name": "벽면 선반"},
+    {"layer": 3, "ts": "o1", "sx": 450, "sy":  68, "sw": 60, "sh": 28, "tx":  1, "ty": 10, "name": "벽면 선반"},
+
+    {"layer": 3, "ts": "o1", "sx":  40, "sy":   0, "sw": 80, "sh": 46, "tx":  3, "ty":  2, "name": "책상 A1"},
+    {"layer": 3, "ts": "o1", "sx": 136, "sy":   0, "sw": 80, "sh": 46, "tx":  9, "ty":  2, "name": "책상 A2"},
+    {"layer": 3, "ts": "o1", "sx":   8, "sy":  64, "sw": 80, "sh": 46, "tx":  3, "ty":  6, "name": "책상 A3"},
+    {"layer": 3, "ts": "o1", "sx":  40, "sy":   0, "sw": 80, "sh": 46, "tx":  9, "ty":  6, "name": "책상 A4"},
+    {"layer": 3, "ts": "o1", "sx": 136, "sy":   0, "sw": 80, "sh": 46, "tx":  3, "ty": 10, "name": "책상 A5"},
+    {"layer": 3, "ts": "o1", "sx":   8, "sy":  64, "sw": 80, "sh": 46, "tx":  9, "ty": 10, "name": "책상 A6"},
+
+    {"layer": 3, "ts": "o1", "sx": 354, "sy": 130, "sw": 58, "sh": 30, "tx": 14, "ty":  2, "name": "캐비넷"},
+    {"layer": 3, "ts": "o1", "sx": 418, "sy": 130, "sw": 58, "sh": 30, "tx": 14, "ty":  5, "name": "캐비넷"},
+    {"layer": 3, "ts": "o1", "sx": 354, "sy": 276, "sw": 60, "sh": 60, "tx": 14, "ty":  8, "name": "책장"},
+
+    {"layer": 4, "ts": "o2", "sx":   4, "sy":   4, "sw": 24, "sh": 32, "tx":  4, "ty":  4, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx":  68, "sy":   4, "sw": 24, "sh": 32, "tx": 10, "ty":  4, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 100, "sy":   4, "sw": 24, "sh": 32, "tx":  4, "ty":  8, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 132, "sy":   4, "sw": 24, "sh": 32, "tx": 10, "ty":  8, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx":   4, "sy":   4, "sw": 24, "sh": 32, "tx":  4, "ty": 12, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx":  68, "sy":   4, "sw": 24, "sh": 32, "tx": 10, "ty": 12, "name": "의자"},
+
+    {"layer": 4, "ts": "o2", "sx": 160, "sy": 214, "sw": 30, "sh": 30, "tx":  3, "ty":  2, "name": "모니터"},
+    {"layer": 4, "ts": "o2", "sx": 160, "sy": 214, "sw": 30, "sh": 30, "tx":  9, "ty":  2, "name": "모니터"},
+    {"layer": 4, "ts": "o2", "sx": 194, "sy": 214, "sw": 28, "sh": 30, "tx":  3, "ty":  6, "name": "모니터"},
+    {"layer": 4, "ts": "o2", "sx": 226, "sy": 214, "sw": 28, "sh": 30, "tx":  9, "ty":  6, "name": "모니터"},
+    {"layer": 4, "ts": "o2", "sx":   4, "sy": 218, "sw": 22, "sh": 22, "tx": 14, "ty":  1, "name": "시계"},
+
+    {"layer": 3, "ts": "o2", "sx":   2, "sy": 278, "sw": 60, "sh": 32, "tx": 18, "ty":  1, "name": "칠판"},
+    {"layer": 3, "ts": "o2", "sx":  66, "sy": 278, "sw": 60, "sh": 32, "tx": 23, "ty":  1, "name": "차트보드"},
+    {"layer": 3, "ts": "o1", "sx":  40, "sy":   0, "sw": 80, "sh": 46, "tx": 18, "ty":  4, "name": "회의 테이블"},
+    {"layer": 3, "ts": "o1", "sx": 136, "sy":   0, "sw": 80, "sh": 46, "tx": 23, "ty":  4, "name": "회의 테이블"},
+    {"layer": 4, "ts": "o2", "sx": 196, "sy":   4, "sw": 24, "sh": 32, "tx": 19, "ty":  3, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 228, "sy":   4, "sw": 24, "sh": 32, "tx": 23, "ty":  3, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 196, "sy":   4, "sw": 24, "sh": 32, "tx": 26, "ty":  3, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 228, "sy":   4, "sw": 24, "sh": 32, "tx": 19, "ty":  7, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 196, "sy":   4, "sw": 24, "sh": 32, "tx": 23, "ty":  7, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 228, "sy":   4, "sw": 24, "sh": 32, "tx": 26, "ty":  7, "name": "의자"},
+    {"layer": 4, "ts": "o2", "sx": 288, "sy":  22, "sw": 24, "sh": 58, "tx": 27, "ty":  9, "name": "정수기"},
+
+    {"layer": 3, "ts": "o2", "sx": 194, "sy": 338, "sw": 60, "sh": 40, "tx":  1, "ty": 14, "name": "화분 (대)"},
+    {"layer": 3, "ts": "o2", "sx": 134, "sy": 338, "sw": 52, "sh": 38, "tx":  6, "ty": 14, "name": "화분 (중)"},
+    {"layer": 3, "ts": "o2", "sx":  70, "sy": 338, "sw": 52, "sh": 38, "tx": 11, "ty": 14, "name": "화분 (소)"},
+    {"layer": 3, "ts": "o2", "sx":  70, "sy": 338, "sw": 52, "sh": 38, "tx": 16, "ty": 14, "name": "화분 (소)"},
+    {"layer": 3, "ts": "o2", "sx": 134, "sy": 338, "sw": 52, "sh": 38, "tx": 18, "ty": 14, "name": "화분 (중)"},
+
+    {"layer": 3, "ts": "o2", "sx":  10, "sy": 452, "sw": 44, "sh": 24, "tx":  3, "ty": 17, "name": "러그"},
+    {"layer": 3, "ts": "o2", "sx":  74, "sy": 452, "sw": 44, "sh": 24, "tx":  8, "ty": 17, "name": "러그"},
+    {"layer": 3, "ts": "o2", "sx": 138, "sy": 452, "sw": 44, "sh": 24, "tx": 13, "ty": 17, "name": "러그"},
+
+    {"layer": 3, "ts": "o2", "sx": 384, "sy":  18, "sw": 64, "sh": 62, "tx":  1, "ty": 16, "name": "자판기"},
+    {"layer": 3, "ts": "o2", "sx": 458, "sy":  16, "sw": 46, "sh": 64, "tx":  5, "ty": 16, "name": "사물함"},
+    {"layer": 3, "ts": "o2", "sx":   2, "sy": 402, "sw": 60, "sh": 40, "tx": 17, "ty": 17, "name": "수납박스"},
+
+    {"layer": 3, "ts": "o2", "sx": 366, "sy": 324, "sw": 48, "sh": 58, "tx": 23, "ty": 14, "name": "프린터"},
+    {"layer": 3, "ts": "o2", "sx": 328, "sy":  22, "sw": 24, "sh": 58, "tx": 27, "ty": 14, "name": "PC 타워"},
+    {"layer": 3, "ts": "o2", "sx": 326, "sy": 404, "sw": 52, "sh": 44, "tx": 22, "ty": 17, "name": "수납박스 A"},
+    {"layer": 3, "ts": "o2", "sx": 390, "sy": 404, "sw": 52, "sh": 44, "tx": 25, "ty": 17, "name": "수납박스 B"},
+    {"layer": 3, "ts": "o2", "sx":   2, "sy": 402, "sw": 60, "sh": 40, "tx": 22, "ty": 19, "name": "수납박스 C"}
+  ]
+}

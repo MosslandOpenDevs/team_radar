@@ -773,7 +773,7 @@
           const names = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ko'));
           workByUserWrap.innerHTML = names.map((name) => {
             const rows = grouped[name];
-            return '<div class="user-block"><div class="user-head">' + esc(name) + ' (' + rows.length + '건)</div><div class="table-wrap"><table><thead><tr><th>시간</th><th>상태</th><th>요약</th></tr></thead><tbody>' + rows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summary || '-') + '</td></tr>').join('') + '</tbody></table></div></div>';
+            return '<div class="user-block"><div class="user-head">' + esc(name) + ' (' + rows.length + '건)</div><div class="table-wrap"><table><thead><tr><th>시간</th><th>상태</th><th>요약</th><th>원문</th></tr></thead><tbody>' + rows.map((r) => '<tr><td>' + fmt(r.at) + '</td><td>' + badgeByState(r.state) + '</td><td>' + esc(r.summaryShort || r.summary || '-') + '</td><td class="muted">' + esc(r.summary || '-') + '</td></tr>').join('') + '</tbody></table></div></div>';
           }).join('');
 
           metaEl.textContent = '최근 동기화: ' + fmt(status.now) + ' | 전체 ' + logs.totalEvents + '건 (근태 ' + attendanceRows.length + ' / 업무 ' + workRows.length + ') | 멤버 ' + memberRows.length + '명';

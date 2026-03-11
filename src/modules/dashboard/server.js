@@ -75,7 +75,7 @@ function clearSessionCookie(res) {
 }
 
 app.get('/login', (req, res) => {
-  if (!AUTH_ENABLED) return res.redirect('/dashboard');
+  if (!AUTH_ENABLED) return res.redirect('/map/composed_set_map.html');
 
   const html = `<!doctype html>
 <html lang="ko">
@@ -106,7 +106,7 @@ app.get('/login', (req, res) => {
       const token = document.getElementById('token').value || '';
       const r = await fetch('/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token }) });
       if (r.ok) {
-        location.href = '/dashboard';
+        location.href = '/map/composed_set_map.html';
         return;
       }
       msg.textContent = '토큰이 올바르지 않습니다.';

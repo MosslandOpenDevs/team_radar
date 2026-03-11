@@ -1,0 +1,124 @@
+:root {
+  --bg: #050505;
+  --panel: #101010;
+  --text: #f1f1f1;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.top p {
+  margin: 6px 0 0;
+  color: #b9b9b9;
+}
+
+.stage-wrap {
+  flex: 1;
+  border: 1px solid #242424;
+  border-radius: 12px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 120px);
+  min-height: 420px;
+  background: #000;
+}
+
+.actor {
+  position: absolute;
+  width: 48px;
+  height: 96px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.actor img {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+
+.name-tag {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 2px);
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #2d2d2d;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f2f2f2;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.name-tag::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+  flex: 0 0 auto;
+}
+
+.actor.is-away .name-tag::before {
+  display: none;
+}
+
+.bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 2px);
+  transform: translateX(-50%);
+  max-width: 160px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  border: 1px solid #2f2f2f;
+  background: rgba(255, 255, 255, 0.95);
+  color: #111;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(255,255,255,0.95);
+}
+
+.bubble.hidden {
+  display: none;
+}

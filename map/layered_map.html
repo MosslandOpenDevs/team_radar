@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Layered Map Viewer</title>
+<style>
+body{margin:0;background:#0f1220;color:#dce3ff;font-family:system-ui;padding:16px;}
+#top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+select,button{background:#1b2140;color:#dce3ff;border:1px solid #334;padding:6px 10px;border-radius:6px}
+label{font-size:13px;opacity:.9}
+#wrap{position:relative;display:inline-block;border:1px solid #2a2f55;box-shadow:0 0 24px rgba(0,0,0,.45)}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+#info{margin-top:8px;font-size:12px;opacity:.8;white-space:pre-wrap}
+</style></head><body>
+<div id="top">
+<label>세트:</label><select id="setSel"></select>
+<button id="toggleObj">오브젝트 보기: ON</button>
+<button id="toggleCol">컬리전 보기: OFF</button>
+</div>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<div id="info"></div>
+<script>
+const TILE=48;
+const MAP_SETS={"Condominium_Design_2": {"floor": "import/floor/Condominium_Design_2_layer_1_48x48.png", "objects": [], "collision": ["import/collision/Condominium_Design_2_layer_2_48x48.png"]}, "Generic_Home_1": {"floor": "import/floor/Generic_Home_1_Layer_1_48x48.png", "objects": [], "collision": ["import/collision/Generic_Home_1_Layer_2_48x48.png"]}, "Gym_2": {"floor": "import/floor/Gym_2_layer_1_48x48.png", "objects": [], "collision": ["import/collision/Gym_2_layer_2_48x48.png"]}, "Condominium_Design": {"floor": "import/floor/Condominium_Design_layer_1_48x48.png", "objects": [], "collision": ["import/collision/Condominium_Design_layer_2_48x48.png"]}, "Ice_Cream_Shop_Design": {"floor": "import/floor/Ice_Cream_Shop_Design_layer_1_48x48.png", "objects": [], "collision": ["import/collision/Ice_Cream_Shop_Design_layer_2_48x48.png", "import/collision/Ice_Cream_Shop_Design_layer_3_48x48.png"]}, "Tv_Studio_Design": {"floor": "import/floor/Tv_Studio_Design_layer_1_48x48.png", "objects": [], "collision": ["import/collision/Tv_Studio_Design_layer_2_48x48.png"]}};
+let showObj=true,showCol=false;
+const setSel=document.getElementById('setSel');
+for(const k of Object.keys(MAP_SETS)){const o=document.createElement('option');o.value=k;o.textContent=k;setSel.appendChild(o);}
+const q=new URLSearchParams(location.search).get('set'); if(q&&MAP_SETS[q]) setSel.value=q;
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d'); ctx.imageSmoothingEnabled=false;
+const info=document.getElementById('info');
+
+document.getElementById('toggleObj').onclick=()=>{showObj=!showObj;document.getElementById('toggleObj').textContent='오브젝트 보기: '+(showObj?'ON':'OFF');render();};
+document.getElementById('toggleCol').onclick=()=>{showCol=!showCol;document.getElementById('toggleCol').textContent='컬리전 보기: '+(showCol?'ON':'OFF');render();};
+setSel.onchange=render;
+
+function load(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src+'?v=1';})}
+
+async function render(){
+  const key=setSel.value||Object.keys(MAP_SETS)[0];
+  const s=MAP_SETS[key]; if(!s) return;
+  const floor=await load(s.floor);
+  const objImgs=await Promise.all((s.objects||[]).map(load).concat((s.collision||[]).map(load)));
+  const visual=(s.objects&&s.objects.length)? objImgs.slice(0,s.objects.length) : objImgs;
+  const collisionImgs=(s.collision&&s.collision.length)? objImgs.slice(s.objects.length) : visual;
+  cv.width=floor.width; cv.height=floor.height;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(floor,0,0);
+  if(showObj) for(const im of visual) ctx.drawImage(im,0,0);
+
+  // collision grid from alpha
+  const cols=Math.ceil(cv.width/TILE), rows=Math.ceil(cv.height/TILE);
+  const off=document.createElement('canvas'); off.width=cv.width; off.height=cv.height;
+  const ox=off.getContext('2d');
+  for(const im of collisionImgs) ox.drawImage(im,0,0);
+  const data=ox.getImageData(0,0,cv.width,cv.height).data;
+  let blocked=0;
+  const grid=[];
+  for(let y=0;y<rows;y++){
+    const row=[];
+    for(let x=0;x<cols;x++){
+      let solid=0;
+      const sx=x*TILE, sy=y*TILE;
+      for(let py=sy;py<Math.min(sy+TILE,cv.height) && !solid;py+=4){
+        for(let px=sx;px<Math.min(sx+TILE,cv.width);px+=4){
+          const a=data[(py*cv.width+px)*4+3]; if(a>24){solid=1;break;}
+        }
+      }
+      row.push(solid); if(solid) blocked++;
+      if(showCol&&solid){ctx.fillStyle='rgba(255,70,70,.28)';ctx.fillRect(x*TILE,y*TILE,TILE,TILE);}
+      if(showCol){ctx.strokeStyle='rgba(255,255,255,.08)';ctx.strokeRect(x*TILE+.5,y*TILE+.5,TILE-1,TILE-1);}
+    }
+    grid.push(row);
+  }
+  info.textContent=`${key}
+크기: ${cv.width}x${cv.height} px (${cols}x${rows} tiles @48)
+레이어: floor 1 + objects ${visual.length} + collision ${collisionImgs.length}
+blocked tiles: ${blocked}`;
+  window.currentCollisionGrid=grid;
+}
+render();
+</script></body></html>

@@ -238,6 +238,7 @@ async function getLogs(limit = 30) {
       channelId: r.channel_id,
       messageId: r.message_id,
       at: r.occurred_at ? new Date(r.occurred_at).toISOString() : null,
+      summaryShort: r.raw_payload?.summaryShort || null,
       scheduledFor: r.raw_payload?.scheduledFor || null,
       durationText: r.raw_payload?.durationText || null,
     })),

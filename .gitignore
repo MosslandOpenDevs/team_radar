@@ -12,3 +12,4 @@ public/reports/
 *.key
 .DS_Store
 .runtime/
+map/__pycache__/
