@@ -1,11 +1,13 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const { PNG } = require('pngjs');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { ROOT_DIR, DB_FILE, COLLISION_OVERRIDES_FILE, COLLISION_MASK_FILE } = require('../../core/paths');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const MAP_DIR = path.join(ROOT_DIR, 'map');
 const pgStore = require('../../core/pg-store');
 const {
   DEFAULT_STATUS_ROOM_MAPPING,
@@ -24,6 +26,11 @@ const WANTEDSPACE_BOT_ID = process.env.WANTEDSPACE_BOT_ID || ''; // wantedspaceB
 const CHRONICLE_BOT_ID = process.env.CHRONICLE_BOT_ID || '';      // ChronicleBot - 연차/반차/재택근무
 const WANTEDSPACE_STATES = new Set(['출근', '퇴근', '지각', '복귀', '자리비움']);
 const CHRONICLE_SCHEDULE_STATES = new Set(['재택근무', '연차', '반차', '오전반차', '오후반차', '휴가']);
+const APP_ACCESS_TOKEN = String(process.env.APP_ACCESS_TOKEN || '').trim();
+const AUTH_ENABLED = APP_ACCESS_TOKEN.length > 0;
+const SESSION_COOKIE_NAME = 'teamradar_session';
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7d
+const SESSION_STORE = new Map(); // sid -> {createdAt, lastSeenAt}
 
 const app = express();
 app.use((req, res, next) => {
@@ -34,6 +41,125 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+function parseCookies(req) {
+  const raw = String(req.headers?.cookie || '');
+  if (!raw) return {};
+  return raw.split(';').map((v) => v.trim()).filter(Boolean).reduce((acc, part) => {
+    const idx = part.indexOf('=');
+    if (idx <= 0) return acc;
+    const k = decodeURIComponent(part.slice(0, idx));
+    const v = decodeURIComponent(part.slice(idx + 1));
+    acc[k] = v;
+    return acc;
+  }, {});
+}
+
+function constantTimeEqual(a, b) {
+  const aa = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (aa.length !== bb.length) return false;
+  return crypto.timingSafeEqual(aa, bb);
+}
+
+function createSession() {
+  const sid = crypto.randomBytes(24).toString('hex');
+  const now = Date.now();
+  SESSION_STORE.set(sid, { createdAt: now, lastSeenAt: now });
+  return sid;
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+app.get('/login', (req, res) => {
+  if (!AUTH_ENABLED) return res.redirect('/dashboard');
+
+  const html = `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TeamRadar Login</title>
+  <style>
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:#0d1222; color:#dbe4ff; font-family:system-ui; }
+    form { width:min(420px, 92vw); background:#151d38; border:1px solid #2f3f75; border-radius:12px; padding:18px; }
+    input, button { width:100%; box-sizing:border-box; border-radius:8px; border:1px solid #3a4f8a; background:#101832; color:#e6eeff; padding:10px 12px; }
+    button { margin-top:10px; background:#2a4dc7; border-color:#3d62df; cursor:pointer; }
+    #msg { margin-top:10px; font-size:13px; color:#ffb7b7; min-height:18px; }
+  </style>
+</head>
+<body>
+  <form id="loginForm">
+    <h3 style="margin:0 0 10px 0;">TeamRadar Access</h3>
+    <input id="token" type="password" placeholder="Access token" autocomplete="off" required />
+    <button type="submit">입장</button>
+    <div id="msg"></div>
+  </form>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = document.getElementById('msg');
+      msg.textContent = '';
+      const token = document.getElementById('token').value || '';
+      const r = await fetch('/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token }) });
+      if (r.ok) {
+        location.href = '/dashboard';
+        return;
+      }
+      msg.textContent = '토큰이 올바르지 않습니다.';
+    });
+  </script>
+</body>
+</html>`;
+  res.status(200).send(html);
+});
+
+app.post('/auth/login', (req, res) => {
+  if (!AUTH_ENABLED) return res.json({ ok: true, disabled: true });
+  const input = String(req.body?.token || '');
+  if (!constantTimeEqual(input, APP_ACCESS_TOKEN)) {
+    return res.status(401).json({ ok: false, error: 'invalid_token' });
+  }
+
+  const sid = createSession();
+  const isSecure = String(req.headers['x-forwarded-proto'] || '').includes('https');
+  const cookie = `${SESSION_COOKIE_NAME}=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${isSecure ? '; Secure' : ''}`;
+  res.setHeader('Set-Cookie', cookie);
+  return res.json({ ok: true });
+});
+
+app.post('/auth/logout', (req, res) => {
+  const sid = parseCookies(req)[SESSION_COOKIE_NAME];
+  if (sid) SESSION_STORE.delete(sid);
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.use((req, res, next) => {
+  if (!AUTH_ENABLED) return next();
+  if (req.path === '/login' || req.path === '/auth/login' || req.path === '/healthz') return next();
+
+  const sid = parseCookies(req)[SESSION_COOKIE_NAME];
+  const session = sid ? SESSION_STORE.get(sid) : null;
+  if (session) {
+    if (Date.now() - session.lastSeenAt > SESSION_TTL_MS) {
+      SESSION_STORE.delete(sid);
+      clearSessionCookie(res);
+    } else {
+      session.lastSeenAt = Date.now();
+      return next();
+    }
+  }
+
+  const accept = String(req.headers.accept || '');
+  if (accept.includes('text/html')) return res.redirect('/login');
+  return res.status(401).json({ ok: false, error: 'auth_required' });
+});
+
+app.use('/map', express.static(MAP_DIR));
 app.use(express.static(PUBLIC_DIR));
 
 let discordClient = null;
@@ -243,6 +369,7 @@ app.get('/api/team/logs', async (req, res) => {
     .slice(0, limit)
     .map((e) => ({
       ...e,
+      summaryShort: e.summaryShort || e?.raw_payload?.summaryShort || null,
       scheduledFor: e.scheduledFor || e?.raw_payload?.scheduledFor || null,
       durationText: e.durationText || e?.raw_payload?.durationText || null,
     }));
@@ -1403,7 +1530,7 @@ function extractAttendanceName(text) {
   const t = String(text || '').trim();
   if (!t) return null;
 
-  const cleaned = t.replace(/[*_`~\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleaned = t.replace(/[*_`~\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
 
   const patterns = [
     /^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12}).*(?:출근|퇴근)\s*했습니다\.?/,
