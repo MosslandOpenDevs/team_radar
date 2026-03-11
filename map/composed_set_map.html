@@ -21,8 +21,14 @@
     border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px;
     display:flex; align-items:center; gap:5px; transition:background .12s, border-color .12s;
   }
-  #toggleGroup button:hover { background:#263260; border-color:#4060a0; }
+  #toggleGroup button:hover, #toggleGroup a:hover { background:#263260; border-color:#4060a0; }
   #toggleGroup button.btn-on { background:#1c3580; border-color:#4070d0; color:#c8deff; }
+  #toggleGroup a {
+    background:#1b2448; color:#aabfdf; border:1px solid #2a3766;
+    border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px;
+    display:flex; align-items:center; gap:5px; transition:background .12s, border-color .12s;
+    text-decoration:none;
+  }
 
   /* ── App wrapper ─────────────────────────────────────── */
   #appWrap { display:flex; flex-direction:column; height:100vh; }
@@ -84,32 +90,64 @@
   /* ── Mobile layout (< 768px) ─────────────────────────── */
   @media (max-width: 767px) {
     /* 상단바 축소 */
-    #topBar { padding:5px 8px; }
-    #mapTitleText { font-size:12px; }
+    #topBar { padding:2px 8px; }
+    #mapTitleText { font-size:11px; }
 
     /* 토글 버튼: 아이콘만, 텍스트 숨김 */
     .btn-text { display:none; }
-    #toggleGroup button { padding:5px 7px; gap:0; }
+    #toggleGroup button { padding:3px 6px; gap:0; }
 
-    /* 레이아웃: 세로 배치, 스크롤 허용, 자동 높이 */
+    /* 레이아웃: 세로 배치, 내용에 따라 스크롤 */
     #mapLayout {
-      flex-direction:column; padding:6px; gap:6px;
-      overflow-y:auto; align-items:stretch;
+      flex-direction:column; padding:2px; gap:2px;
+      overflow-y:auto; overflow-x:hidden; align-items:stretch;
+      flex:1; min-height:0;
     }
 
-    /* 포커스 패널: 고정 높이 제거 → canvas 비율에 맞춤 */
-    #focusPane { flex:0 0 auto; height:auto; }
-    #focusHeader { padding:5px 10px; }
-    #focusLabel { font-size:13px; letter-spacing:.4px; }
-    #focusCanvas { width:100%; height:auto; display:block; }
+    /* 포커스 패널: 가로 꽉 채움, 높이는 맵 비율에 따라 자동 */
+    #focusPane { flex:0 0 auto; min-height:0; height:auto; overflow:hidden; }
+    #focusHeader { padding:2px 8px; }
+    #focusLabel { font-size:12px; letter-spacing:.3px; }
+    #focusCanvas { width:100%; display:block; }
 
-    /* 서브뷰 패널: 가로 3분할, 고정 높이 제거 */
-    #subPane { flex:0 0 auto; height:auto; flex-direction:row; gap:4px; }
-    .sv-item { flex:1; min-width:0; height:auto; }
-    .sv-header { padding:4px 6px; }
-    .sv-label { font-size:10px; letter-spacing:.2px; }
-    .sv-canvas { width:100%; height:auto; display:block; pointer-events:none; }
+    /* 서브뷰 패널: 하단 가로 3분할, 각각 가로 꽉 채움 */
+    #subPane {
+      flex:0 0 auto; height:auto; flex-direction:row; gap:2px;
+      padding:0; overflow:hidden;
+    }
+    .sv-item {
+      flex:1 1 0; min-width:0; height:auto; overflow:hidden;
+      border-radius:6px; border-width:1px;
+    }
+    .sv-item:active { border-color:#5080e0; background:#1c3580; }
+    .sv-header { padding:1px 4px; }
+    .sv-label { font-size:8px; letter-spacing:.1px; }
+    .sv-canvas { width:100%; display:block; }
+
+    /* info 바 숨김 (모바일에서 공간 절약) */
+    #info { display:none; }
+
+    /* 줌 컨트롤 (모바일 전용) */
+    #zoomControl {
+      display:flex !important; position:absolute; bottom:8px; right:8px; z-index:20;
+      flex-direction:column; gap:4px;
+    }
+    #zoomControl button {
+      width:36px; height:36px; border-radius:10px;
+      background:rgba(11,16,32,0.88); color:#c8d8ff; border:1px solid #2a3766;
+      font-size:18px; font-weight:700; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    }
+    #zoomControl button:active { background:#1c3580; border-color:#4070d0; }
+    #zoomLevel {
+      text-align:center; font-size:10px; color:#8aa8d8;
+      background:rgba(11,16,32,0.75); border-radius:6px; padding:1px 0;
+    }
   }
+
+  /* 줌 컨트롤: 데스크탑에서 숨김 */
+  #zoomControl { display:none; }
 </style>
 </head>
 <body>
@@ -121,15 +159,22 @@
       <button id="toggleCollision"><span class="btn-icon">💥</span><span class="btn-text"> 컬리전: OFF</span></button>
       <button id="toggleRooms" class="btn-on"><span class="btn-icon">🏠</span><span class="btn-text"> 룸 경계: ON</span></button>
       <button id="toggleActors" class="btn-on"><span class="btn-icon">👤</span><span class="btn-text"> 캐릭터: ON</span></button>
+      <a href="/dashboard" id="gotoDashboard"><span class="btn-icon">🛰️</span><span class="btn-text"> Dashboard</span></a>
     </div>
   </div>
 
   <!-- 포커스 + 서브뷰 레이아웃 -->
   <div id="mapLayout">
     <!-- 포커스 뷰 (70%) -->
-    <div id="focusPane">
+    <div id="focusPane" style="position:relative;">
       <div id="focusHeader"><span id="focusLabel">로딩중...</span></div>
       <canvas id="focusCanvas"></canvas>
+      <!-- 모바일 줌 컨트롤 -->
+      <div id="zoomControl">
+        <button id="zoomIn">+</button>
+        <div id="zoomLevel">1.0x</div>
+        <button id="zoomOut">−</button>
+      </div>
     </div>
 
     <!-- 서브뷰 패널 3개 (30%) -->
@@ -259,6 +304,24 @@ const isMobileView = () => false; // 포커스+서브뷰 시스템이 모바일/
 const ACTOR_COUNT = window.innerWidth <= 900 ? 10 : 14;
 const ACTOR_FRAMES = 6;
 const DATA_POLL_MS = 120000;
+
+// ── 모바일 줌 & DPR ──────────────────────────────────────
+let mobZoom = 1.0;
+const MOB_ZOOM_STEPS = [1.0, 1.5, 2.0];
+const MOB_FONT_SCALE = 1.4; // 모바일 닉네임/말풍선 폰트 배율
+document.getElementById('zoomIn')?.addEventListener('click', () => {
+  const idx = MOB_ZOOM_STEPS.indexOf(mobZoom);
+  if (idx < MOB_ZOOM_STEPS.length - 1) mobZoom = MOB_ZOOM_STEPS[idx + 1];
+  document.getElementById('zoomLevel').textContent = mobZoom + 'x';
+  blitPanels();
+});
+document.getElementById('zoomOut')?.addEventListener('click', () => {
+  const idx = MOB_ZOOM_STEPS.indexOf(mobZoom);
+  if (idx > 0) mobZoom = MOB_ZOOM_STEPS[idx - 1];
+  document.getElementById('zoomLevel').textContent = mobZoom + 'x';
+  blitPanels();
+});
+function getDPR() { return Math.min(window.devicePixelRatio || 1, 3); }
 const ACTOR_DIRS = ['down', 'left', 'right', 'up'];
 const SHEETS = Array.from({length:20}, (_,i) => `Premade_Character_48x48_${String(i+1).padStart(2,'0')}`);
 const ACTOR_STATUS = ['출근', '집중', '식사중', '휴게', '회의중'];
@@ -658,8 +721,8 @@ function getViewportBounds() {
     h,
     x0: Math.max(0, x - VIEW_MARGIN),
     y0: Math.max(0, y - VIEW_MARGIN),
-    x1: Math.min(cv.width, x + w + VIEW_MARGIN),
-    y1: Math.min(cv.height, y + h + VIEW_MARGIN),
+    x1: Math.min(COMPOSED ? COMPOSED.w : cv.width, x + w + VIEW_MARGIN),
+    y1: Math.min(COMPOSED ? COMPOSED.h : cv.height, y + h + VIEW_MARGIN),
   };
 }
 
@@ -1001,11 +1064,15 @@ async function build() {
 
   COMPOSED = { w:maxW, h:maxH, cols, rows, placed, collisionGrid:grid, customMode: useCustomMap };
 
-  cv.width = COMPOSED.w;
-  cv.height = COMPOSED.h;
+  // 메인 캔버스를 DPR 배율로 렌더링 → blit 시 선명한 소스 제공
+  const _renderDPR = getDPR();
+  cv.width = Math.round(COMPOSED.w * _renderDPR);
+  cv.height = Math.round(COMPOSED.h * _renderDPR);
+  ctx.scale(_renderDPR, _renderDPR);
+  ctx.imageSmoothingEnabled = false;
   staticLayer = document.createElement('canvas');
-  staticLayer.width = COMPOSED.w;
-  staticLayer.height = COMPOSED.h;
+  staticLayer.width = Math.round(COMPOSED.w * _renderDPR);
+  staticLayer.height = Math.round(COMPOSED.h * _renderDPR);
   staticDirty = true;
 
   await preloadActorSprites();
@@ -1027,24 +1094,26 @@ function draw() {
 
   if (staticDirty && staticLayer) {
     const sctx = staticLayer.getContext('2d');
-    sctx.clearRect(0, 0, staticLayer.width, staticLayer.height);
+    sctx.setTransform(getDPR(), 0, 0, getDPR(), 0, 0);
+    sctx.clearRect(0, 0, COMPOSED.w, COMPOSED.h);
 
     // base floor
     sctx.fillStyle = '#171d33';
-    sctx.fillRect(0, 0, staticLayer.width, staticLayer.height);
+    sctx.fillRect(0, 0, COMPOSED.w, COMPOSED.h);
 
     // subtle corridor grid
     sctx.strokeStyle = 'rgba(255,255,255,0.04)';
     sctx.lineWidth = 1;
     for (let x = 0; x <= COMPOSED.cols; x++) {
-      sctx.beginPath(); sctx.moveTo(x * TILE + .5, 0); sctx.lineTo(x * TILE + .5, staticLayer.height); sctx.stroke();
+      sctx.beginPath(); sctx.moveTo(x * TILE + .5, 0); sctx.lineTo(x * TILE + .5, COMPOSED.h); sctx.stroke();
     }
     for (let y = 0; y <= COMPOSED.rows; y++) {
-      sctx.beginPath(); sctx.moveTo(0, y * TILE + .5); sctx.lineTo(staticLayer.width, y * TILE + .5); sctx.stroke();
+      sctx.beginPath(); sctx.moveTo(0, y * TILE + .5); sctx.lineTo(COMPOSED.w, y * TILE + .5); sctx.stroke();
     }
 
     // draw room floors + collision layer as visible objects
-    sctx.font = '12px monospace';
+    const _roomFontSize = Math.round(12 * ((window.innerWidth < 768) ? MOB_FONT_SCALE : 1.2));
+    sctx.font = _roomFontSize + 'px monospace';
     const mobileTf = getMobileRoomTransform();
     const visibleRooms = isMobileView()
       ? [mobileTf?.room].filter(Boolean)
@@ -1103,7 +1172,14 @@ function draw() {
   const sw = Math.max(1, vp.x1 - vp.x0);
   const sh = Math.max(1, vp.y1 - vp.y0);
   ctx.clearRect(vp.x0, vp.y0, sw, sh);
-  if (staticLayer) ctx.drawImage(staticLayer, vp.x0, vp.y0, sw, sh, vp.x0, vp.y0, sw, sh);
+  if (staticLayer) {
+    // staticLayer는 DPR 배율 물리 픽셀, ctx는 scale(dpr) 적용된 논리 좌표
+    const _rd = getDPR();
+    ctx.drawImage(staticLayer,
+      Math.round(vp.x0 * _rd), Math.round(vp.y0 * _rd),
+      Math.round(sw * _rd), Math.round(sh * _rd),
+      vp.x0, vp.y0, sw, sh);
+  }
 
   if (showActors) {
     const mobileTf = getMobileRoomTransform();
@@ -1119,7 +1195,10 @@ function draw() {
       })
       .sort((a, b) => a.y - b.y);
     const bubbleRects = [];
-    ctx.font = '11px monospace';
+    const PC_FONT_SCALE = 1.2; // PC 텍스트 선명도 향상
+    const _mobScale = (window.innerWidth < 768) ? MOB_FONT_SCALE : PC_FONT_SCALE;
+    const _nickFont = Math.round(11 * _mobScale);
+    ctx.font = _nickFont + 'px monospace';
     for (const a of sorted) {
       const ox = (isMobileView() && mobileTf) ? mobileTf.offsetX : 0;
       const oy = (isMobileView() && mobileTf) ? mobileTf.offsetY : 0;
@@ -1142,14 +1221,15 @@ function draw() {
         if (last && last.complete && last.naturalWidth > 0) ctx.drawImage(last, dx, dy, 48, 96);
       }
 
-      // 하단 닉네임 태그 + 초록점 + 상태
+      // 하단 닉네임 태그 + 초록점 + 상태 (모바일 확대)
       const nick = a.name;
-      if (a.nameW == null) a.nameW = ctx.measureText(nick).width;
+      a.nameW = ctx.measureText(nick).width; // 매번 측정 (폰트 크기 변동 대응)
       const nw = a.nameW;
-      const tagX = Math.round(rx - nw / 2 - 13);
+      const tagPad = Math.round(13 * _mobScale);
+      const tagX = Math.round(rx - nw / 2 - tagPad);
       const tagY = Math.round(ry + 6);
-      const tagW = Math.round(nw + 26);
-      const tagH = 14;
+      const tagW = Math.round(nw + tagPad * 2);
+      const tagH = Math.round(14 * _mobScale);
 
       ctx.shadowColor = 'rgba(0,0,0,0.35)';
       ctx.shadowBlur = 5;
@@ -1166,23 +1246,25 @@ function draw() {
       ctx.stroke();
 
       // online dot
+      const dotR = Math.round(3 * _mobScale);
       ctx.fillStyle = a.online ? '#21e68a' : '#5f6b82';
       ctx.beginPath();
-      ctx.arc(tagX + 8, tagY + 7, 3, 0, Math.PI * 2);
+      ctx.arc(tagX + Math.round(8 * _mobScale), tagY + Math.round(tagH / 2), dotR, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = '#e8f0ff';
-      ctx.fillText(nick, tagX + 14, tagY + 10);
+      ctx.fillText(nick, tagX + tagPad + 1, tagY + Math.round(tagH * 0.72));
 
-      // 말풍선
+      // 말풍선 (모바일 확대)
       if (performance.now() < a.bubbleUntil) {
         const rawText = a.bubbleText || '';
-        if (a.bubbleW == null) a.bubbleW = Math.min(260, ctx.measureText(rawText).width + 16);
+        const bubbleMaxW = Math.round(260 * _mobScale);
+        a.bubbleW = Math.min(bubbleMaxW, ctx.measureText(rawText).width + Math.round(16 * _mobScale));
         const bw = a.bubbleW;
-        const text = fitTextByWidth(ctx, rawText, bw - 16);
-        const bh = 18;
+        const text = fitTextByWidth(ctx, rawText, bw - Math.round(16 * _mobScale));
+        const bh = Math.round(18 * _mobScale);
         const bx = Math.round(rx - bw / 2);
-        let by = Math.round(dy - 19);
+        let by = Math.round(dy - Math.round(19 * _mobScale));
 
         // simple anti-overlap stacking
         let rect = { x: bx, y: by, w: bw, h: bh + 6 };
@@ -1218,7 +1300,7 @@ function draw() {
         ctx.stroke();
 
         ctx.fillStyle = '#2a3155';
-        ctx.fillText(text, bx + 8, by + 12);
+        ctx.fillText(text, bx + Math.round(8 * _mobScale), by + Math.round(bh * 0.67));
       }
     }
   }
@@ -1401,37 +1483,59 @@ function setFocusRoom(roomIdx) {
   notifBadges.delete(roomIdx);
 }
 
-// 캔버스 → 패널 복사 (blit)
+// 캔버스 → 패널 복사 (blit) — DPR + 모바일 줌 지원
 const _bpPrev = { fw: 0, fh: 0, sv: [{}, {}, {}] };
 function blitPanels() {
   if (!COMPOSED || !cv.width || !cv.height) return;
   const focusRoom = COMPOSED.placed[focusRoomIdx];
   if (!focusRoom) return;
 
-  // ── 포커스 캔버스 ──
   const isMob = window.innerWidth < 768;
+  const dpr = getDPR(); // PC + 모바일 모두 DPR 적용
+  const srcDPR = getDPR(); // 메인 캔버스 렌더 DPR (소스 좌표 변환용)
+  const zoom = isMob ? mobZoom : 1;
+
+  // ── 포커스 캔버스 (DPR + 줌) ──
   const fCanvas = document.getElementById('focusCanvas');
   if (fCanvas) {
     const fw = fCanvas.clientWidth || focusRoom.w;
-    const fh = isMob
-      ? Math.round(focusRoom.h * (fw / focusRoom.w))
-      : (fCanvas.clientHeight || focusRoom.h);
-    if (fCanvas.width !== fw || fCanvas.height !== fh) { fCanvas.width = fw; fCanvas.height = fh; }
+    let fh;
+    if (isMob) {
+      // 모바일: 가로 꽉 채움, 비율 유지 (줌과 무관하게 원본 비율)
+      fh = Math.round(focusRoom.h * (fw / focusRoom.w));
+    } else {
+      fh = fCanvas.clientHeight || focusRoom.h;
+    }
+    const bw = Math.round(fw * dpr);
+    const bh = Math.round(fh * dpr);
+    if (fCanvas.width !== bw || fCanvas.height !== bh) { fCanvas.width = bw; fCanvas.height = bh; }
+    fCanvas.style.width = fw + 'px';
+    fCanvas.style.height = fh + 'px';
     const fCtx = fCanvas.getContext('2d');
+    fCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fCtx.imageSmoothingEnabled = true;
     fCtx.imageSmoothingQuality = 'high';
+    fCtx.clearRect(0, 0, fw, fh);
+
     if (isMob) {
-      fCtx.clearRect(0, 0, fw, fh);
-      fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, 0, 0, fw, fh);
+      // 모바일: 가로 100% 꽉 채움, 줌 시 확대
+      fCtx.drawImage(cv,
+        Math.round(focusRoom.px * srcDPR), Math.round(focusRoom.py * srcDPR),
+        Math.round(focusRoom.w * srcDPR), Math.round(focusRoom.h * srcDPR),
+        0, 0, fw, fh);
     } else {
-      const scale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
-      const dw = Math.round(focusRoom.w * scale);
-      const dh = Math.round(focusRoom.h * scale);
+      // PC: 비율 유지 중앙 배치
+      const baseScale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
+      const dw = Math.round(focusRoom.w * baseScale);
+      const dh = Math.round(focusRoom.h * baseScale);
       const dx = Math.round((fw - dw) / 2);
       const dy = Math.round((fh - dh) / 2);
-      fCtx.clearRect(0, 0, fw, fh);
-      fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, dx, dy, dw, dh);
+      fCtx.drawImage(cv,
+        Math.round(focusRoom.px * srcDPR), Math.round(focusRoom.py * srcDPR),
+        Math.round(focusRoom.w * srcDPR), Math.round(focusRoom.h * srcDPR),
+        dx, dy, dw, dh);
     }
+    fCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   // ── 포커스 헤더 ──
@@ -1449,24 +1553,42 @@ function blitPanels() {
     if (!room) continue;
 
     const sw = svCanvas.clientWidth || room.w;
-    const sh = isMob
-      ? Math.round(room.h * (sw / room.w))
-      : (svCanvas.clientHeight || room.h);
-    if (svCanvas.width !== sw || svCanvas.height !== sh) { svCanvas.width = sw; svCanvas.height = sh; }
+    let sh;
+    if (isMob) {
+      // 모바일: 가로 꽉 채움 → 높이 자동
+      sh = Math.round(room.h * (sw / room.w));
+    } else {
+      sh = svCanvas.clientHeight || room.h;
+    }
+    const sbw = Math.round(sw * dpr);
+    const sbh = Math.round(sh * dpr);
+    if (svCanvas.width !== sbw || svCanvas.height !== sbh) { svCanvas.width = sbw; svCanvas.height = sbh; }
+    svCanvas.style.width = sw + 'px';
+    svCanvas.style.height = sh + 'px';
     const svCtx = svCanvas.getContext('2d');
+    svCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     svCtx.imageSmoothingEnabled = true;
     svCtx.imageSmoothingQuality = 'high';
     svCtx.clearRect(0, 0, sw, sh);
     if (isMob) {
-      svCtx.drawImage(cv, room.px, room.py, room.w, room.h, 0, 0, sw, sh);
+      // 모바일: 가로 100% 꽉 채움
+      svCtx.drawImage(cv,
+        Math.round(room.px * srcDPR), Math.round(room.py * srcDPR),
+        Math.round(room.w * srcDPR), Math.round(room.h * srcDPR),
+        0, 0, sw, sh);
     } else {
+      // PC: 비율 유지 중앙 배치
       const scale = Math.min(sw / room.w, sh / room.h);
       const dw = Math.round(room.w * scale);
       const dh = Math.round(room.h * scale);
       const ddx = Math.round((sw - dw) / 2);
       const ddy = Math.round((sh - dh) / 2);
-      svCtx.drawImage(cv, room.px, room.py, room.w, room.h, ddx, ddy, dw, dh);
+      svCtx.drawImage(cv,
+        Math.round(room.px * srcDPR), Math.round(room.py * srcDPR),
+        Math.round(room.w * srcDPR), Math.round(room.h * srcDPR),
+        ddx, ddy, dw, dh);
     }
+    svCtx.setTransform(1, 0, 0, 1, 0, 0);
 
     // 레이블 & 배지 업데이트
     const labelEl = svEl.querySelector('.sv-label');
