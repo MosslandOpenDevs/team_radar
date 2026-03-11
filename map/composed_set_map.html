@@ -5,47 +5,143 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Composed Office Map</title>
 <style>
-  body { margin:0; background:#0d1222; color:#dbe4ff; font-family:system-ui; padding:14px; }
-  #top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
-  button { background:#1b2448; color:#dbe4ff; border:1px solid #33406f; border-radius:8px; padding:6px 10px; cursor:pointer; }
-  #wrap { position:relative; display:block; border:1px solid #2a3766; box-shadow:0 10px 30px rgba(0,0,0,.45); width:calc(100vw - 28px); height:calc(100vh - 170px); min-height:520px; overflow:auto; touch-action:none; cursor:grab; background:#0f1730; }
-  #wrap:active { cursor:grabbing; }
-  canvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; max-width:none; height:auto; }
-  #mini-wrap { display:none; }
-  #mini-title { display:none; }
-  #mini { display:none; }
-  #info { margin-top:8px; font-size:12px; opacity:.85; white-space:pre-wrap; }
-  #mobileNav { display:none; gap:8px; align-items:center; }
-  #mobileRoomLabel { font-size:12px; opacity:.9; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background:#0d1222; color:#dbe4ff; font-family:system-ui; height:100vh; overflow:hidden; }
 
-  @media (max-width: 900px) {
-    body { padding:10px; }
-    button { padding:8px 11px; font-size:13px; }
-    #wrap { width: calc(100vw - 22px); height: calc(100vh - 180px); min-height:460px; }
-    #info { font-size:11px; }
-    #mobileNav { display:flex; }
+  /* ── Top bar ─────────────────────────────────────────── */
+  #topBar {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:8px 12px; flex-shrink:0;
+    border-bottom:1px solid #1e2a44; background:#0b1020;
   }
+  #mapTitleText { font-size:15px; font-weight:700; letter-spacing:.4px; color:#c8d8ff; }
+  #toggleGroup { display:flex; gap:6px; }
+  #toggleGroup button {
+    background:#1b2448; color:#aabfdf; border:1px solid #2a3766;
+    border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px;
+    display:flex; align-items:center; gap:5px; transition:background .12s, border-color .12s;
+  }
+  #toggleGroup button:hover { background:#263260; border-color:#4060a0; }
+  #toggleGroup button.btn-on { background:#1c3580; border-color:#4070d0; color:#c8deff; }
+
+  /* ── App wrapper ─────────────────────────────────────── */
+  #appWrap { display:flex; flex-direction:column; height:100vh; }
+
+  /* ── Map layout ──────────────────────────────────────── */
+  #mapLayout { display:flex; flex:1; gap:8px; padding:8px; overflow:hidden; min-height:0; }
+
+  /* ── Focus pane (70%) ────────────────────────────────── */
+  #focusPane {
+    flex:0 0 70%; display:flex; flex-direction:column;
+    border:1px solid #2a3766; border-radius:12px; overflow:hidden;
+    box-shadow:0 8px 28px rgba(0,0,0,.55);
+  }
+  #focusHeader {
+    display:flex; align-items:center; justify-content:center;
+    padding:8px 14px; flex-shrink:0;
+    background:linear-gradient(90deg,#152060,#0e1840);
+    border-bottom:1px solid #2a3a6a;
+  }
+  #focusLabel {
+    font-size:16px; font-weight:700; letter-spacing:.8px;
+    color:#a8c8ff; text-transform:uppercase; text-shadow:0 1px 6px rgba(80,140,255,.5);
+  }
+  #focusCanvas {
+    flex:1; display:block; background:#0f1730; min-height:0;
+    width:100%; height:100%;
+  }
+
+  /* ── Subview pane (30%) ──────────────────────────────── */
+  #subPane { flex:0 0 30%; display:flex; flex-direction:column; gap:6px; min-height:0; }
+  .sv-item {
+    flex:1; display:flex; flex-direction:column; min-height:0;
+    border:1px solid #2a3766; border-radius:10px; overflow:hidden;
+    cursor:pointer; transition:border-color .15s, box-shadow .15s;
+  }
+  .sv-item:hover { border-color:#4f70c0; box-shadow:0 0 10px rgba(79,112,192,.25); }
+  .sv-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 10px; flex-shrink:0;
+    background:#0f1730; border-bottom:1px solid #1e2e50;
+  }
+  .sv-label { font-size:12px; font-weight:600; color:#8aa8d8; letter-spacing:.4px; text-transform:uppercase; }
+  .sv-badge {
+    width:8px; height:8px; background:#ff3f3f; border-radius:50%;
+    display:none; box-shadow:0 0 5px rgba(255,60,60,.7); flex-shrink:0;
+  }
+  .sv-canvas {
+    flex:1; display:block; background:#0a1025; min-height:0;
+    width:100%; height:100%;
+  }
+
+  /* ── Info bar ────────────────────────────────────────── */
+  #info { padding:4px 12px 6px; font-size:11px; opacity:.65; white-space:pre-wrap; flex-shrink:0; }
+
+  /* ── Hidden legacy elements ──────────────────────────── */
+  #wrap { position:fixed; top:-9999px; left:-9999px; width:4000px; height:4000px; overflow:hidden; background:#0f1730; }
+  #mini-wrap, #mini-title, #mini, #mobileNav { display:none !important; }
 </style>
 </head>
 <body>
-<div id="top">
-  <button id="toggleCollision">컬리전 표시: OFF</button>
-  <button id="toggleRooms">룸 경계 표시: ON</button>
-  <button id="toggleActors">캐릭터 이동: ON</button>
-  <div id="mobileNav">
-    <button id="mobilePrevRoom">◀</button>
-    <span id="mobileRoomLabel">모바일 구역: -</span>
-    <button id="mobileNextRoom">▶</button>
+<div id="appWrap">
+  <!-- Top bar: 타이틀 좌측, 토글 버튼 우측 -->
+  <div id="topBar">
+    <span id="mapTitleText">🗺️ Team Radar Map</span>
+    <div id="toggleGroup">
+      <button id="toggleCollision">💥 컬리전: OFF</button>
+      <button id="toggleRooms" class="btn-on">🏠 룸 경계: ON</button>
+      <button id="toggleActors" class="btn-on">👤 캐릭터: ON</button>
+    </div>
   </div>
+
+  <!-- 포커스 + 서브뷰 레이아웃 -->
+  <div id="mapLayout">
+    <!-- 포커스 뷰 (70%) -->
+    <div id="focusPane">
+      <div id="focusHeader"><span id="focusLabel">로딩중...</span></div>
+      <canvas id="focusCanvas"></canvas>
+    </div>
+
+    <!-- 서브뷰 패널 3개 (30%) -->
+    <div id="subPane">
+      <div class="sv-item" data-sv="0">
+        <div class="sv-header">
+          <span class="sv-label">-</span>
+          <span class="sv-badge" id="badge-0"></span>
+        </div>
+        <canvas class="sv-canvas" id="svc-0"></canvas>
+      </div>
+      <div class="sv-item" data-sv="1">
+        <div class="sv-header">
+          <span class="sv-label">-</span>
+          <span class="sv-badge" id="badge-1"></span>
+        </div>
+        <canvas class="sv-canvas" id="svc-1"></canvas>
+      </div>
+      <div class="sv-item" data-sv="2">
+        <div class="sv-header">
+          <span class="sv-label">-</span>
+          <span class="sv-badge" id="badge-2"></span>
+        </div>
+        <canvas class="sv-canvas" id="svc-2"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div id="info"></div>
 </div>
+
+<!-- 숨겨진 메인 캔버스 (렌더링 전용) -->
 <div id="wrap">
   <canvas id="cv"></canvas>
-  <div id="mini-wrap">
-    <div id="mini-title">MINIMAP</div>
-    <canvas id="mini"></canvas>
-  </div>
+  <div id="mini-wrap"><div id="mini-title">MINIMAP</div><canvas id="mini"></canvas></div>
 </div>
-<div id="info"></div>
+<!-- 모바일 nav (호환성 유지) -->
+<div id="mobileNav">
+  <button id="mobilePrevRoom">◀</button>
+  <span id="mobileRoomLabel">-</span>
+  <button id="mobileNextRoom">▶</button>
+</div>
 
 <script>
 const TILE = 48;
@@ -159,21 +255,27 @@ const MOBILE_SLOT_Y = TILE * 2;
 
 document.getElementById('toggleCollision').onclick = () => {
   showCollision = !showCollision;
-  document.getElementById('toggleCollision').textContent = `컬리전 표시: ${showCollision ? 'ON' : 'OFF'}`;
+  const btn = document.getElementById('toggleCollision');
+  btn.textContent = `💥 컬리전: ${showCollision ? 'ON' : 'OFF'}`;
+  btn.classList.toggle('btn-on', showCollision);
   staticDirty = true;
   draw();
 };
 
 document.getElementById('toggleRooms').onclick = () => {
   showRooms = !showRooms;
-  document.getElementById('toggleRooms').textContent = `룸 경계 표시: ${showRooms ? 'ON' : 'OFF'}`;
+  const btn = document.getElementById('toggleRooms');
+  btn.textContent = `🏠 룸 경계: ${showRooms ? 'ON' : 'OFF'}`;
+  btn.classList.toggle('btn-on', showRooms);
   staticDirty = true;
   draw();
 };
 
 document.getElementById('toggleActors').onclick = () => {
   showActors = !showActors;
-  document.getElementById('toggleActors').textContent = `캐릭터 이동: ${showActors ? 'ON' : 'OFF'}`;
+  const btn = document.getElementById('toggleActors');
+  btn.textContent = `👤 캐릭터: ${showActors ? 'ON' : 'OFF'}`;
+  btn.classList.toggle('btn-on', showActors);
   draw();
 };
 
@@ -617,6 +719,8 @@ function updateActors(dt, now) {
       a.bubbleW = null;
       a.bubbleUntil = now + 2200;
       a.nextBubbleAt = now + 5000 + Math.random() * 7000;
+      // 포커스가 아닌 공간에서 말풍선 발생 → 알림 배지 표시
+      if (a.roomIndex !== focusRoomIdx) notifBadges.add(a.roomIndex);
     }
 
     // 상태는 서버 폴링 데이터 기준으로 유지
@@ -883,6 +987,7 @@ async function build() {
     console.log('[MAP] mapOnly=1: API polling disabled, local demo actors only');
   }
   draw();
+  blitPanels();
   focusMobileRoom();
   if (!loopStarted) startLoop();
 }
@@ -1243,10 +1348,101 @@ function startLoop() {
     updateActors(dt, now);
     draw();
     drawMiniMap();
+    blitPanels();
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
+
+// ── 포커스 + 서브뷰 상태 ─────────────────────────────────
+let focusRoomIdx = 0;
+const notifBadges = new Set();
+
+// 서브뷰에 표시할 방 순서 (포커스가 아닌 3개)
+function getSubviewOrder() {
+  if (!COMPOSED) return [1, 2, 3];
+  const all = COMPOSED.placed.map((_, i) => i);
+  return all.filter((i) => i !== focusRoomIdx);
+}
+
+// 포커스 방 전환
+function setFocusRoom(roomIdx) {
+  focusRoomIdx = roomIdx;
+  notifBadges.delete(roomIdx);
+}
+
+// 캔버스 → 패널 복사 (blit)
+const _bpPrev = { fw: 0, fh: 0, sv: [{}, {}, {}] };
+function blitPanels() {
+  if (!COMPOSED || !cv.width || !cv.height) return;
+  const focusRoom = COMPOSED.placed[focusRoomIdx];
+  if (!focusRoom) return;
+
+  // ── 포커스 캔버스 ──
+  const fCanvas = document.getElementById('focusCanvas');
+  if (fCanvas) {
+    const fw = fCanvas.clientWidth || focusRoom.w;
+    const fh = fCanvas.clientHeight || focusRoom.h;
+    if (fCanvas.width !== fw || fCanvas.height !== fh) { fCanvas.width = fw; fCanvas.height = fh; }
+    const fCtx = fCanvas.getContext('2d');
+    fCtx.imageSmoothingEnabled = true;
+    fCtx.imageSmoothingQuality = 'high';
+    const scale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
+    const dw = Math.round(focusRoom.w * scale);
+    const dh = Math.round(focusRoom.h * scale);
+    const dx = Math.round((fw - dw) / 2);
+    const dy = Math.round((fh - dh) / 2);
+    fCtx.clearRect(0, 0, fw, fh);
+    fCtx.drawImage(cv, focusRoom.px, focusRoom.py, focusRoom.w, focusRoom.h, dx, dy, dw, dh);
+  }
+
+  // ── 포커스 헤더 ──
+  const focusLabel = document.getElementById('focusLabel');
+  if (focusLabel) focusLabel.textContent = focusRoom.label || statusLabelForSlot(focusRoomIdx);
+
+  // ── 서브뷰 캔버스 3개 ──
+  const subIdxs = getSubviewOrder();
+  for (let s = 0; s < 3; s++) {
+    const roomIdx = subIdxs[s];
+    const svEl = document.querySelector(`.sv-item[data-sv="${s}"]`);
+    const svCanvas = document.getElementById(`svc-${s}`);
+    if (!svEl || !svCanvas || roomIdx == null) continue;
+    const room = COMPOSED.placed[roomIdx];
+    if (!room) continue;
+
+    const sw = svCanvas.clientWidth || room.w;
+    const sh = svCanvas.clientHeight || room.h;
+    if (svCanvas.width !== sw || svCanvas.height !== sh) { svCanvas.width = sw; svCanvas.height = sh; }
+    const svCtx = svCanvas.getContext('2d');
+    svCtx.imageSmoothingEnabled = true;
+    svCtx.imageSmoothingQuality = 'high';
+    const scale = Math.min(sw / room.w, sh / room.h);
+    const dw = Math.round(room.w * scale);
+    const dh = Math.round(room.h * scale);
+    const ddx = Math.round((sw - dw) / 2);
+    const ddy = Math.round((sh - dh) / 2);
+    svCtx.clearRect(0, 0, sw, sh);
+    svCtx.drawImage(cv, room.px, room.py, room.w, room.h, ddx, ddy, dw, dh);
+
+    // 레이블 & 배지 업데이트
+    const labelEl = svEl.querySelector('.sv-label');
+    if (labelEl) labelEl.textContent = room.label || statusLabelForSlot(roomIdx);
+    const badge = document.getElementById(`badge-${s}`);
+    if (badge) badge.style.display = notifBadges.has(roomIdx) ? 'block' : 'none';
+
+    // 클릭 핸들러 (roomIdx 바인딩은 매 blit마다 data-room-idx로 동기화)
+    svEl.dataset.roomIdx = roomIdx;
+  }
+}
+
+// 서브뷰 클릭 시 포커스 교체
+document.querySelectorAll('.sv-item').forEach((el) => {
+  el.addEventListener('click', () => {
+    const roomIdx = parseInt(el.dataset.roomIdx ?? '-1');
+    if (isNaN(roomIdx) || roomIdx < 0) return;
+    setFocusRoom(roomIdx);
+  });
+});
 
 build();
 </script>
