@@ -141,7 +141,7 @@ app.post('/auth/logout', (req, res) => {
 
 app.use((req, res, next) => {
   if (!AUTH_ENABLED) return next();
-  if (req.path === '/login' || req.path === '/auth/login' || req.path === '/healthz') return next();
+  if (req.path === '/login' || req.path === '/auth/login' || req.path === '/healthz' || req.path === '/favicon.ico') return next();
 
   const sid = parseCookies(req)[SESSION_COOKIE_NAME];
   const session = sid ? SESSION_STORE.get(sid) : null;

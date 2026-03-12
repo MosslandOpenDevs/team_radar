@@ -966,8 +966,8 @@
           }
           statusCache = status;
 
-          const hideBots = !!hideBotsToggle?.checked;
-          const filteredUsers = (status.users || []).filter((u) => !hideBots || !isBotLikeUser(u));
+          const hideBotsOn = !!hideBotsToggle?.checked;
+          const filteredUsers = (status.users || []).filter((u) => !hideBotsOn || !isBotLikeUser(u));
 
           attendanceEl.innerHTML = ''; workEl.innerHTML = ''; systemEl.innerHTML = '';
           Object.entries(status.summary.attendance).forEach(([k, v]) => attendanceEl.appendChild(li(k, v)));
@@ -984,8 +984,8 @@
           await loadStatusRoomMapping();
 
           const botIds = new Set((status.users || []).filter((u) => isBotLikeUser(u)).map((u) => String(u.userId)));
-          const attendanceRows = (logs.rows || []).filter((r) => r.kind === 'attendance' && (!hideBots || !botIds.has(String(r.userId))));
-          const workRows = (logs.rows || []).filter((r) => r.kind === 'work' && (!hideBots || !botIds.has(String(r.userId))));
+          const attendanceRows = (logs.rows || []).filter((r) => r.kind === 'attendance' && (!hideBotsOn || !botIds.has(String(r.userId))));
+          const workRows = (logs.rows || []).filter((r) => r.kind === 'work' && (!hideBotsOn || !botIds.has(String(r.userId))));
           const leaveRows = (leaveData.rows || []);
           const unclassifiedRows = (unclassifiedData.rows || []);
 
