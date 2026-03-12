@@ -18,9 +18,24 @@ npm run map:serve
 ```
 
 - Dashboard: `http://localhost:3100/dashboard`
-- Map: `http://localhost:8765/composed_set_map.html`
+- Map (권장): `http://localhost:3100/map/composed_set_map.html`
+- Map (독립 서버): `http://localhost:8765/composed_set_map.html`
 
-> `map:serve`는 `team_radar/map` 경로를 정적으로 서빙합니다.
+> `map:serve`는 `team_radar/map` 경로를 8765로 정적 서빙합니다.
+> 대시보드 서버(3100)에서도 `/map/*` 라우트로 같은 맵 파일을 제공합니다(단일 포트 운영/터널링 권장).
+
+---
+
+## External Access Tip (ngrok / single tunnel)
+
+무료 ngrok 1개 터널만 쓸 때는 `3100`만 열고 `/map/*` 경로를 사용하세요.
+
+```bash
+ngrok http 3100
+```
+
+- Dashboard: `https://<ngrok-domain>/dashboard`
+- Map: `https://<ngrok-domain>/map/composed_set_map.html`
 
 ---
 

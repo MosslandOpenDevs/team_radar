@@ -19,7 +19,6 @@ start_if_missing() {
 
 start_if_missing "node dashboard/index.js" "cd '$ROOT' && node dashboard/index.js" "$LOG_DIR/dashboard.log"
 start_if_missing "node collector/index.js" "cd '$ROOT' && node collector/index.js" "$LOG_DIR/collector.log"
-start_if_missing "python3 -m http.server 8765" "cd '$ROOT/map' && python3 -m http.server 8765 --bind 0.0.0.0" "$LOG_DIR/map.log"
 
 TS_IP="$(tailscale ip -4 2>/dev/null | head -n1 || true)"
 if [ -n "$TS_IP" ]; then

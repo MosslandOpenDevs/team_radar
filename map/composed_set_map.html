@@ -200,9 +200,7 @@ const QS = new URLSearchParams(location.search);
 const API_BASE_FROM_QS = (QS.get('apiBase') || '').trim();
 const MAP_ONLY_MODE = QS.get('mapOnly') === '1';
 const CUSTOM_MODE_QS = (QS.get('custom') || '').trim(); // 1|0
-const DEFAULT_API_BASE = (location.port === '8765')
-  ? `${location.protocol}//${location.hostname}:3100`
-  : location.origin;
+const DEFAULT_API_BASE = location.origin;
 const API_BASE = API_BASE_FROM_QS || DEFAULT_API_BASE;
 const CUSTOM_BASE_MAP = `${API_BASE}/assets/custom-map/base_map.png`;
 const CUSTOM_COLLISION_MASK = `${API_BASE}/assets/custom-map/collision_mask.png`;
@@ -307,27 +305,69 @@ const INFO_UPDATE_MS = 1000;
 const MOBILE_SLOT_X = TILE * 2;
 const MOBILE_SLOT_Y = TILE * 2;
 
-document.getElementById('toggleCollision').onclick = () => {
+// ── DOM 캐시 (rAF 루프 내 반복 쿼리 제거) ─────────────────────
+let _domFocusCanvas = null, _domFocusLabel = null;
+const _domSvCanvas = [], _domSvEl = [], _domSvLabel = [], _domBadge = [];
+function _cacheDOM() {
+  _domFocusCanvas = document.getElementById('focusCanvas');
+  _domFocusLabel  = document.getElementById('focusLabel');
+  for (let s = 0; s < 3; s++) {
+    _domSvCanvas[s] = document.getElementById(`svc-${s}`);
+    _domSvEl[s]     = document.querySelector(`.sv-item[data-sv="${s}"]`);
+    _domSvLabel[s]  = _domSvEl[s]?.querySelector('.sv-label') || null;
+    _domBadge[s]    = document.getElementById(`badge-${s}`);
+  }
+}
+
+// ── isMobile 캐시 (resize 이벤트에서만 갱신) ──────────────────
+let _isMob = window.innerWidth < 768;
+
+// ── measureText 캐시 (폰트 변경 시 무효화) ────────────────────
+const _nameWidthCache = Object.create(null);
+let _nameWidthFont = '';
+function _getNameWidth(ctx, name) {
+  if (_nameWidthFont !== ctx.font) {
+    for (const k in _nameWidthCache) delete _nameWidthCache[k];
+    _nameWidthFont = ctx.font;
+  }
+  if (_nameWidthCache[name] === undefined) _nameWidthCache[name] = ctx.measureText(name).width;
+  return _nameWidthCache[name];
+}
+
+// ── collision blocked count 캐시 ──────────────────────────────
+let _blockedCount = 0;
+function _updateBlockedCount() {
+  _blockedCount = 0;
+  if (!COMPOSED) return;
+  for (const row of COMPOSED.collisionGrid) for (const c of row) if (c) _blockedCount++;
+}
+
+// ── 탭 숨김 시 rAF 렌더 스킵 ──────────────────────────────────
+let _tabVisible = !document.hidden;
+document.addEventListener('visibilitychange', () => { _tabVisible = !document.hidden; });
+
+// ── 버튼 핸들러 (currentTarget으로 내부 재쿼리 제거) ──────────
+document.getElementById('toggleCollision').onclick = (e) => {
   showCollision = !showCollision;
-  const btn = document.getElementById('toggleCollision');
+  const btn = e.currentTarget;
   btn.innerHTML = `<span class="btn-icon">💥</span><span class="btn-text"> 컬리전: ${showCollision ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showCollision);
   staticDirty = true;
   draw();
 };
 
-document.getElementById('toggleRooms').onclick = () => {
+document.getElementById('toggleRooms').onclick = (e) => {
   showRooms = !showRooms;
-  const btn = document.getElementById('toggleRooms');
+  const btn = e.currentTarget;
   btn.innerHTML = `<span class="btn-icon">🏠</span><span class="btn-text"> 룸 경계: ${showRooms ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showRooms);
   staticDirty = true;
   draw();
 };
 
-document.getElementById('toggleActors').onclick = () => {
+document.getElementById('toggleActors').onclick = (e) => {
   showActors = !showActors;
-  const btn = document.getElementById('toggleActors');
+  const btn = e.currentTarget;
   btn.innerHTML = `<span class="btn-icon">👤</span><span class="btn-text"> 캐릭터: ${showActors ? 'ON' : 'OFF'}</span>`;
   btn.classList.toggle('btn-on', showActors);
   draw();
@@ -1044,6 +1084,8 @@ async function build() {
   } else {
     console.log('[MAP] mapOnly=1: API polling disabled, local demo actors only');
   }
+  _cacheDOM();          // DOM 참조 캐싱 (rAF 루프 내 getElementById 제거)
+  _updateBlockedCount(); // blocked tile count 초기 계산
   draw();
   blitPanels();
   focusMobileRoom();
@@ -1054,26 +1096,25 @@ function draw() {
   if (!COMPOSED) return;
 
   if (staticDirty && staticLayer) {
+    const _dpr = getDPR(); // 한 번만 읽기
     const sctx = staticLayer.getContext('2d');
-    sctx.setTransform(getDPR(), 0, 0, getDPR(), 0, 0);
-    sctx.clearRect(0, 0, COMPOSED.w, COMPOSED.h);
-
-    // base floor
+    sctx.setTransform(_dpr, 0, 0, _dpr, 0, 0);
+    // clearRect 제거 — 바로 아래 fillRect가 전체를 불투명하게 덮음
     sctx.fillStyle = '#171d33';
     sctx.fillRect(0, 0, COMPOSED.w, COMPOSED.h);
 
-    // subtle corridor grid
+    // 격자선 배치(batch): 수직/수평 각 1회 beginPath+stroke
     sctx.strokeStyle = 'rgba(255,255,255,0.04)';
     sctx.lineWidth = 1;
-    for (let x = 0; x <= COMPOSED.cols; x++) {
-      sctx.beginPath(); sctx.moveTo(x * TILE + .5, 0); sctx.lineTo(x * TILE + .5, COMPOSED.h); sctx.stroke();
-    }
-    for (let y = 0; y <= COMPOSED.rows; y++) {
-      sctx.beginPath(); sctx.moveTo(0, y * TILE + .5); sctx.lineTo(COMPOSED.w, y * TILE + .5); sctx.stroke();
-    }
+    sctx.beginPath();
+    for (let x = 0; x <= COMPOSED.cols; x++) { sctx.moveTo(x * TILE + .5, 0); sctx.lineTo(x * TILE + .5, COMPOSED.h); }
+    sctx.stroke();
+    sctx.beginPath();
+    for (let y = 0; y <= COMPOSED.rows; y++) { sctx.moveTo(0, y * TILE + .5); sctx.lineTo(COMPOSED.w, y * TILE + .5); }
+    sctx.stroke();
 
     // draw room floors + collision layer as visible objects
-    const _roomFontSize = Math.round(12 * ((window.innerWidth < 768) ? MOB_FONT_SCALE : 1.2));
+    const _roomFontSize = Math.round(12 * (_isMob ? MOB_FONT_SCALE : 1.2));
     sctx.font = _roomFontSize + 'px monospace';
     const mobileTf = getMobileRoomTransform();
     const visibleRooms = isMobileView()
@@ -1156,8 +1197,8 @@ function draw() {
       })
       .sort((a, b) => a.y - b.y);
     const bubbleRects = [];
-    const PC_FONT_SCALE = 1.2; // PC 텍스트 선명도 향상
-    const _mobScale = (window.innerWidth < 768) ? MOB_FONT_SCALE : PC_FONT_SCALE;
+    const PC_FONT_SCALE = 1.2;
+    const _mobScale = _isMob ? MOB_FONT_SCALE : PC_FONT_SCALE;
     const _nickFont = Math.round(11 * _mobScale);
     ctx.font = _nickFont + 'px monospace';
     for (const a of sorted) {
@@ -1184,7 +1225,7 @@ function draw() {
 
       // 하단 닉네임 태그 + 초록점 + 상태 (모바일 확대)
       const nick = a.name;
-      a.nameW = ctx.measureText(nick).width; // 매번 측정 (폰트 크기 변동 대응)
+      a.nameW = _getNameWidth(ctx, nick); // 캐시 사용, 폰트 변경 시 자동 무효화
       const nw = a.nameW;
       const tagPad = Math.round(13 * _mobScale);
       const tagX = Math.round(rx - nw / 2 - tagPad);
@@ -1268,10 +1309,9 @@ function draw() {
 
   const now = performance.now();
   if (now - lastInfoUpdate > INFO_UPDATE_MS) {
-    let blocked = 0;
-    for (const row of COMPOSED.collisionGrid) for (const c of row) if (c) blocked++;
+    // blocked count는 캐시값 사용 (매초 전체 순회 제거)
     const modeText = COMPOSED.customMode ? 'Custom Base+Mask' : 'Composed Rooms';
-    info.textContent = `Composed Map (${modeText})\n크기: ${COMPOSED.w}x${COMPOSED.h} px (${COMPOSED.cols}x${COMPOSED.rows} tiles @48)\n컬리전 편집 기준: 48x48 타일맵 (Dashboard effective collision 동기화)\n방 수: ${COMPOSED.placed.length}\n캐릭터: ${actors.length} (서버 데이터 기반, 2분 폴링)\nblocked tiles: ${blocked}`;
+    info.textContent = `Composed Map (${modeText})\n크기: ${COMPOSED.w}x${COMPOSED.h} px (${COMPOSED.cols}x${COMPOSED.rows} tiles @48)\n컬리전 편집 기준: 48x48 타일맵 (Dashboard effective collision 동기화)\n방 수: ${COMPOSED.placed.length}\n캐릭터: ${actors.length} (서버 데이터 기반, 2분 폴링)\nblocked tiles: ${_blockedCount}`;
     lastInfoUpdate = now;
   }
 
@@ -1395,6 +1435,7 @@ wrap.addEventListener('pointercancel', () => { panDragging = false; });
 
 wrap.addEventListener('scroll', () => drawMiniMap());
 window.addEventListener('resize', () => {
+  _isMob = window.innerWidth < 768; // isMobile 캐시 갱신
   staticDirty = true;
   drawMiniMap();
   draw();
@@ -1405,6 +1446,9 @@ function startLoop() {
   loopStarted = true;
   let last = performance.now();
   const tick = (now) => {
+    requestAnimationFrame(tick);
+    if (!_tabVisible) return; // 탭 숨김 시 렌더링 전체 스킵
+
     const dt = now - last;
     last = now;
 
@@ -1422,7 +1466,6 @@ function startLoop() {
     draw();
     drawMiniMap();
     blitPanels();
-    requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }
@@ -1451,11 +1494,10 @@ function blitPanels() {
   const focusRoom = COMPOSED.placed[focusRoomIdx];
   if (!focusRoom) return;
 
-  const isMob = window.innerWidth < 768;
-  const dpr = getDPR(); // PC + 모바일 모두 DPR 적용
-  const srcDPR = getDPR(); // 메인 캔버스 렌더 DPR (소스 좌표 변환용)
-  // ── 포커스 캔버스 (DPR + 줌) ──
-  const fCanvas = document.getElementById('focusCanvas');
+  const isMob = _isMob; // 캐시된 값 사용 (window.innerWidth 읽기 제거)
+  const dpr = getDPR(); // 한 번만 호출 (srcDPR 별도 제거)
+  // ── 포커스 캔버스 (DPR) ──
+  const fCanvas = _domFocusCanvas;
   if (fCanvas) {
     const fw = fCanvas.clientWidth || focusRoom.w;
     let fh;
@@ -1478,36 +1520,33 @@ function blitPanels() {
     fCtx.clearRect(0, 0, fw, fh);
 
     if (isMob) {
-      // 모바일: 가로 100% 꽉 채움, 줌 시 확대
       fCtx.drawImage(cv,
-        Math.round(focusRoom.px * srcDPR), Math.round(focusRoom.py * srcDPR),
-        Math.round(focusRoom.w * srcDPR), Math.round(focusRoom.h * srcDPR),
+        Math.round(focusRoom.px * dpr), Math.round(focusRoom.py * dpr),
+        Math.round(focusRoom.w * dpr), Math.round(focusRoom.h * dpr),
         0, 0, fw, fh);
     } else {
-      // PC: 비율 유지 중앙 배치
       const baseScale = Math.min(fw / focusRoom.w, fh / focusRoom.h);
       const dw = Math.round(focusRoom.w * baseScale);
       const dh = Math.round(focusRoom.h * baseScale);
       const dx = Math.round((fw - dw) / 2);
       const dy = Math.round((fh - dh) / 2);
       fCtx.drawImage(cv,
-        Math.round(focusRoom.px * srcDPR), Math.round(focusRoom.py * srcDPR),
-        Math.round(focusRoom.w * srcDPR), Math.round(focusRoom.h * srcDPR),
+        Math.round(focusRoom.px * dpr), Math.round(focusRoom.py * dpr),
+        Math.round(focusRoom.w * dpr), Math.round(focusRoom.h * dpr),
         dx, dy, dw, dh);
     }
     fCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   // ── 포커스 헤더 ──
-  const focusLabel = document.getElementById('focusLabel');
-  if (focusLabel) focusLabel.textContent = focusRoom.label || statusLabelForSlot(focusRoomIdx);
+  if (_domFocusLabel) _domFocusLabel.textContent = focusRoom.label || statusLabelForSlot(focusRoomIdx);
 
   // ── 서브뷰 캔버스 3개 ──
   const subIdxs = getSubviewOrder();
   for (let s = 0; s < 3; s++) {
     const roomIdx = subIdxs[s];
-    const svEl = document.querySelector(`.sv-item[data-sv="${s}"]`);
-    const svCanvas = document.getElementById(`svc-${s}`);
+    const svEl    = _domSvEl[s];
+    const svCanvas = _domSvCanvas[s];
     if (!svEl || !svCanvas || roomIdx == null) continue;
     const room = COMPOSED.placed[roomIdx];
     if (!room) continue;
@@ -1515,7 +1554,6 @@ function blitPanels() {
     const sw = svCanvas.clientWidth || room.w;
     let sh;
     if (isMob) {
-      // 모바일: 가로 꽉 채움 → 높이 자동
       sh = Math.round(room.h * (sw / room.w));
     } else {
       sh = svCanvas.clientHeight || room.h;
@@ -1523,7 +1561,6 @@ function blitPanels() {
     const sbw = Math.round(sw * dpr);
     const sbh = Math.round(sh * dpr);
     if (svCanvas.width !== sbw || svCanvas.height !== sbh) { svCanvas.width = sbw; svCanvas.height = sbh; }
-    // PC: CSS handles display size; mobile: set height for aspect-ratio
     if (isMob) { svCanvas.style.height = sh + 'px'; }
     const svCtx = svCanvas.getContext('2d');
     svCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1531,10 +1568,9 @@ function blitPanels() {
     svCtx.imageSmoothingQuality = 'high';
     svCtx.clearRect(0, 0, sw, sh);
     if (isMob) {
-      // 모바일: 가로 100% 꽉 채움
       svCtx.drawImage(cv,
-        Math.round(room.px * srcDPR), Math.round(room.py * srcDPR),
-        Math.round(room.w * srcDPR), Math.round(room.h * srcDPR),
+        Math.round(room.px * dpr), Math.round(room.py * dpr),
+        Math.round(room.w * dpr), Math.round(room.h * dpr),
         0, 0, sw, sh);
     } else {
       // PC: 비율 유지 중앙 배치
@@ -1544,17 +1580,15 @@ function blitPanels() {
       const ddx = Math.round((sw - dw) / 2);
       const ddy = Math.round((sh - dh) / 2);
       svCtx.drawImage(cv,
-        Math.round(room.px * srcDPR), Math.round(room.py * srcDPR),
-        Math.round(room.w * srcDPR), Math.round(room.h * srcDPR),
+        Math.round(room.px * dpr), Math.round(room.py * dpr),
+        Math.round(room.w * dpr), Math.round(room.h * dpr),
         ddx, ddy, dw, dh);
     }
     svCtx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // 레이블 & 배지 업데이트
-    const labelEl = svEl.querySelector('.sv-label');
-    if (labelEl) labelEl.textContent = room.label || statusLabelForSlot(roomIdx);
-    const badge = document.getElementById(`badge-${s}`);
-    if (badge) badge.style.display = notifBadges.has(roomIdx) ? 'block' : 'none';
+    // 레이블 & 배지 — 캐시된 참조 사용
+    if (_domSvLabel[s]) _domSvLabel[s].textContent = room.label || statusLabelForSlot(roomIdx);
+    if (_domBadge[s]) _domBadge[s].style.display = notifBadges.has(roomIdx) ? 'block' : 'none';
 
     // 클릭 핸들러 (roomIdx 바인딩은 매 blit마다 data-room-idx로 동기화)
     svEl.dataset.roomIdx = roomIdx;

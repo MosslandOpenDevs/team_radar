@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const compression = require('compression');
 const { PNG } = require('pngjs');
 const { Client, GatewayIntentBits } = require('discord.js');
 const { ROOT_DIR, DB_FILE, COLLISION_OVERRIDES_FILE, COLLISION_MASK_FILE } = require('../../core/paths');
@@ -159,8 +160,20 @@ app.use((req, res, next) => {
   return res.status(401).json({ ok: false, error: 'auth_required' });
 });
 
-app.use('/map', express.static(MAP_DIR));
-app.use(express.static(PUBLIC_DIR));
+app.use(compression());
+
+// Static assets: long cache for versioned/fingerprinted files, short for HTML
+const staticOpts = {
+  setHeaders(res, filePath) {
+    if (/\.html?$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day
+    }
+  },
+};
+app.use('/map', express.static(MAP_DIR, staticOpts));
+app.use(express.static(PUBLIC_DIR, staticOpts));
 
 let discordClient = null;
 let memberCache = [];

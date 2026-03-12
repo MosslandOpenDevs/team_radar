@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TeamRadar Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       :root {
@@ -762,8 +763,11 @@
         };
       }
 
+      // collision 캔버스 context 캐싱 (매 호출마다 getContext 제거)
+      const _collisionCtx = collisionCanvas.getContext('2d');
+
       function drawCollisionCanvas() {
-        const ctx = collisionCanvas.getContext('2d');
+        const ctx = _collisionCtx;
         // 1 collision cell == 48x48 world tile (requested FE-aligned edit view)
         const tile = 48;
         collisionCanvas.width = Math.max(1, collisionState.width * tile);
@@ -802,19 +806,20 @@
           }
         }
 
+        // 격자선 배치(batch): beginPath+stroke 2회로 draw call 최소화
         ctx.strokeStyle = 'rgba(148,163,184,0.45)';
+        ctx.beginPath();
         for (let x = 0; x <= collisionState.width; x += 1) {
-          ctx.beginPath();
           ctx.moveTo(x * tile + 0.5, 0);
           ctx.lineTo(x * tile + 0.5, collisionCanvas.height);
-          ctx.stroke();
         }
+        ctx.stroke();
+        ctx.beginPath();
         for (let y = 0; y <= collisionState.height; y += 1) {
-          ctx.beginPath();
           ctx.moveTo(0, y * tile + 0.5);
           ctx.lineTo(collisionCanvas.width, y * tile + 0.5);
-          ctx.stroke();
         }
+        ctx.stroke();
 
         collisionMeta.textContent = `[${collisionState.mapKey}] size ${collisionState.width}x${collisionState.height} tiles (48x48) | block ${collisionState.overrides.block.length} | clear ${collisionState.overrides.clear.length}`;
       }
@@ -910,26 +915,55 @@
         } catch (err) { collisionResult.textContent = 'reset 실패: ' + err.message; }
       }
 
+      // ── 폴링 최적화 ────────────────────────────────────────────
+      // 빠른 데이터(5s): status, logs, leave, unclassified
+      // 느린 데이터(60s): members, attendanceNames (거의 변하지 않음)
+      let _slowCache = { memberRows: null, attendanceNameRows: null, lastAt: 0 };
+      const SLOW_INTERVAL_MS = 60_000;
+      let _fetchController = null; // in-flight 요청 취소용
+
       async function refresh() {
         if (document.activeElement?.matches?.('select[data-map-attendance], select[data-map-user], select[data-char-user]')) return;
+
+        // 이전 요청이 아직 진행 중이면 취소
+        _fetchController?.abort();
+        _fetchController = new AbortController();
+        const sig = _fetchController.signal;
+
         try {
           const leaveDays = Math.max(1, Math.min(60, Number(leaveDaysInput?.value || 30)));
+          const hideBots  = hideBotsToggle?.checked ? 'true' : 'false';
+          const now       = Date.now();
+
+          // 느린 데이터는 60초마다만 재요청
+          const needSlow = now - _slowCache.lastAt > SLOW_INTERVAL_MS;
+          const slowFetches = needSlow
+            ? [fetch('/api/discord/members', { signal: sig }), fetch('/api/attendance/names', { signal: sig })]
+            : [Promise.resolve(null), Promise.resolve(null)];
+
           const [statusRes, logsRes, membersRes, attendanceNamesRes, leaveRes, unclassifiedRes] = await Promise.all([
-            fetch('/api/team/status?hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
-            fetch('/api/team/logs?limit=500&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
-            fetch('/api/discord/members'),
-            fetch('/api/attendance/names'),
-            fetch('/api/team/leave?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
-            fetch('/api/team/attendance-unclassified?days=' + leaveDays + '&limit=300&hideBots=' + (hideBotsToggle?.checked ? 'true' : 'false')),
+            fetch('/api/team/status?hideBots=' + hideBots, { signal: sig }),
+            fetch('/api/team/logs?limit=500&hideBots=' + hideBots, { signal: sig }),
+            ...slowFetches,
+            fetch('/api/team/leave?days=' + leaveDays + '&limit=300&hideBots=' + hideBots, { signal: sig }),
+            fetch('/api/team/attendance-unclassified?days=' + leaveDays + '&limit=300&hideBots=' + hideBots, { signal: sig }),
           ]);
-          const status = await statusRes.json();
-          const logs = await logsRes.json();
-          const members = await membersRes.json();
-          const attendanceNames = await attendanceNamesRes.json();
-          const leaveData = await leaveRes.json();
+          const status          = await statusRes.json();
+          const logs            = await logsRes.json();
+          const leaveData       = await leaveRes.json();
           const unclassifiedData = await unclassifiedRes.json();
-          memberRows = members.rows || [];
-          attendanceNameRows = attendanceNames.rows || [];
+
+          // 느린 데이터: 새로 받은 경우만 갱신, 아니면 캐시 사용
+          if (membersRes) {
+            const members = await membersRes.json();
+            const attendanceNames = await attendanceNamesRes.json();
+            memberRows = members.rows || [];
+            attendanceNameRows = attendanceNames.rows || [];
+            _slowCache = { memberRows, attendanceNameRows, lastAt: now };
+          } else {
+            memberRows = _slowCache.memberRows || memberRows;
+            attendanceNameRows = _slowCache.attendanceNameRows || attendanceNameRows;
+          }
           statusCache = status;
 
           const hideBots = !!hideBotsToggle?.checked;
@@ -971,14 +1005,18 @@
 
           metaEl.textContent = '최근 동기화: ' + fmt(status.now) + ' | 전체 ' + logs.totalEvents + '건 (근태 ' + attendanceRows.length + ' / 업무 ' + workRows.length + ') | 멤버 ' + memberRows.length + '명';
         } catch (err) {
+          if (err.name === 'AbortError') return; // 이전 요청 취소 — 무시
           metaEl.textContent = '에러: ' + err.message;
         }
       }
 
-      document.querySelectorAll('.tab-btn').forEach((btn) => {
+      // 탭 요소 캐싱 (클릭마다 querySelectorAll 제거)
+      const _tabBtns   = Array.from(document.querySelectorAll('.tab-btn'));
+      const _tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
+      _tabBtns.forEach((btn) => {
         btn.addEventListener('click', () => {
-          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-          document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+          _tabBtns.forEach((b) => b.classList.remove('active'));
+          _tabPanels.forEach((p) => p.classList.remove('active'));
           btn.classList.add('active');
           document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
         });
@@ -1095,7 +1133,8 @@
       document.querySelector('[data-tab="collision"]')?.addEventListener('click', loadCollisionEditor);
 
       refresh();
-      setInterval(refresh, 5000);
+      // 탭이 보일 때만 폴링 — 숨김 시 불필요한 서버 요청 차단
+      setInterval(() => { if (!document.hidden) refresh(); }, 5000);
     </script>
 
     <!-- ── 배경 애니메이션 (ambient-bg.js) ── 설정은 window.AMBIENT_BG 객체로 조정 -->
