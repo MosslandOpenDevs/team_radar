@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       :root {
-        --bg: #080c18;
+        --bg: #05070a;
         --surface: #0f1629;
         --surface-raised: #151d35;
         --surface-overlay: #1a2440;
@@ -39,16 +39,13 @@
       body {
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
         background: var(--bg);
-        background-image:
-          radial-gradient(ellipse 80% 50% at 20% -20%, rgba(30,58,138,0.25) 0%, transparent 70%),
-          radial-gradient(ellipse 60% 40% at 80% 110%, rgba(30,58,138,0.15) 0%, transparent 70%);
         color: var(--text);
         line-height: 1.5;
         min-height: 100vh;
       }
 
       /* ── Layout ─────────────────────────────────── */
-      .wrap { max-width: 1360px; margin: 0 auto; padding: 24px 28px; }
+      .wrap { max-width: 1360px; margin: 0 auto; padding: 24px 28px; position: relative; z-index: 2; }
       .top {
         display: flex; justify-content: space-between; align-items: center;
         gap: 16px; margin-bottom: 20px; padding-bottom: 20px;
@@ -1100,5 +1097,8 @@
       refresh();
       setInterval(refresh, 5000);
     </script>
+
+    <!-- ── 배경 애니메이션 (ambient-bg.js) ── 설정은 window.AMBIENT_BG 객체로 조정 -->
+    <script src="/assets/ambient-bg.js"></script>
   </body>
 </html>
