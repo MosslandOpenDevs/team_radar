@@ -211,7 +211,7 @@ const CUSTOM_GRID_COLS = 2;
 const CUSTOM_GRID_ROWS = 2;
 const CUSTOM_GRID_GAP_TILES = 0;
 const ASSET_VERSION = '6';
-const STATUS_ROOM_LABELS = ['사무실', '안출근/퇴근', '재택근무', '휴가'];
+const STATUS_ROOM_LABELS = ['사무실', '퇴근·미출근', '재택근무', '휴가'];
 let STATUS_ROOM_MAPPING = { working: 0, offwork: 1, remote: 2, vacation: 3 };
 
 const MANIFEST = {
@@ -504,7 +504,7 @@ function statusRoomIndex(user, todayAttendanceByName = {}) {
 
 function statusLabelForSlot(slotIdx) {
   if (Number(STATUS_ROOM_MAPPING.working) === Number(slotIdx)) return '사무실';
-  if (Number(STATUS_ROOM_MAPPING.offwork) === Number(slotIdx)) return '안출근/퇴근';
+  if (Number(STATUS_ROOM_MAPPING.offwork) === Number(slotIdx)) return '퇴근·미출근';
   if (Number(STATUS_ROOM_MAPPING.remote) === Number(slotIdx)) return '재택근무';
   if (Number(STATUS_ROOM_MAPPING.vacation) === Number(slotIdx)) return '휴가';
   return STATUS_ROOM_LABELS[slotIdx] || `구역${slotIdx + 1}`;
