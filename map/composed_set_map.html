@@ -127,27 +127,7 @@
     /* info 바 숨김 (모바일에서 공간 절약) */
     #info { display:none; }
 
-    /* 줌 컨트롤 (모바일 전용) */
-    #zoomControl {
-      display:flex !important; position:absolute; bottom:8px; right:8px; z-index:20;
-      flex-direction:column; gap:4px;
-    }
-    #zoomControl button {
-      width:36px; height:36px; border-radius:10px;
-      background:rgba(11,16,32,0.88); color:#c8d8ff; border:1px solid #2a3766;
-      font-size:18px; font-weight:700; cursor:pointer;
-      display:flex; align-items:center; justify-content:center;
-      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-    }
-    #zoomControl button:active { background:#1c3580; border-color:#4070d0; }
-    #zoomLevel {
-      text-align:center; font-size:10px; color:#8aa8d8;
-      background:rgba(11,16,32,0.75); border-radius:6px; padding:1px 0;
-    }
   }
-
-  /* 줌 컨트롤: 데스크탑에서 숨김 */
-  #zoomControl { display:none; }
 </style>
 </head>
 <body>
@@ -169,12 +149,6 @@
     <div id="focusPane" style="position:relative;">
       <div id="focusHeader"><span id="focusLabel">로딩중...</span></div>
       <canvas id="focusCanvas"></canvas>
-      <!-- 모바일 줌 컨트롤 -->
-      <div id="zoomControl">
-        <button id="zoomIn">+</button>
-        <div id="zoomLevel">1.0x</div>
-        <button id="zoomOut">−</button>
-      </div>
     </div>
 
     <!-- 서브뷰 패널 3개 (30%) -->
@@ -305,22 +279,7 @@ const ACTOR_COUNT = window.innerWidth <= 900 ? 10 : 14;
 const ACTOR_FRAMES = 6;
 const DATA_POLL_MS = 120000;
 
-// ── 모바일 줌 & DPR ──────────────────────────────────────
-let mobZoom = 1.0;
-const MOB_ZOOM_STEPS = [1.0, 1.5, 2.0];
 const MOB_FONT_SCALE = 1.4; // 모바일 닉네임/말풍선 폰트 배율
-document.getElementById('zoomIn')?.addEventListener('click', () => {
-  const idx = MOB_ZOOM_STEPS.indexOf(mobZoom);
-  if (idx < MOB_ZOOM_STEPS.length - 1) mobZoom = MOB_ZOOM_STEPS[idx + 1];
-  document.getElementById('zoomLevel').textContent = mobZoom + 'x';
-  blitPanels();
-});
-document.getElementById('zoomOut')?.addEventListener('click', () => {
-  const idx = MOB_ZOOM_STEPS.indexOf(mobZoom);
-  if (idx > 0) mobZoom = MOB_ZOOM_STEPS[idx - 1];
-  document.getElementById('zoomLevel').textContent = mobZoom + 'x';
-  blitPanels();
-});
 function getDPR() { return Math.min(window.devicePixelRatio || 1, 3); }
 const ACTOR_DIRS = ['down', 'left', 'right', 'up'];
 const SHEETS = Array.from({length:20}, (_,i) => `Premade_Character_48x48_${String(i+1).padStart(2,'0')}`);
@@ -1493,8 +1452,6 @@ function blitPanels() {
   const isMob = window.innerWidth < 768;
   const dpr = getDPR(); // PC + 모바일 모두 DPR 적용
   const srcDPR = getDPR(); // 메인 캔버스 렌더 DPR (소스 좌표 변환용)
-  const zoom = isMob ? mobZoom : 1;
-
   // ── 포커스 캔버스 (DPR + 줌) ──
   const fCanvas = document.getElementById('focusCanvas');
   if (fCanvas) {
@@ -1509,8 +1466,9 @@ function blitPanels() {
     const bw = Math.round(fw * dpr);
     const bh = Math.round(fh * dpr);
     if (fCanvas.width !== bw || fCanvas.height !== bh) { fCanvas.width = bw; fCanvas.height = bh; }
-    fCanvas.style.width = fw + 'px';
-    fCanvas.style.height = fh + 'px';
+    // PC: CSS width:100%/height:100% handles display size — don't override with fixed px
+    // Mobile: height must be set explicitly (aspect-ratio computed above)
+    if (isMob) { fCanvas.style.height = fh + 'px'; }
     const fCtx = fCanvas.getContext('2d');
     fCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     fCtx.imageSmoothingEnabled = true;
@@ -1563,8 +1521,8 @@ function blitPanels() {
     const sbw = Math.round(sw * dpr);
     const sbh = Math.round(sh * dpr);
     if (svCanvas.width !== sbw || svCanvas.height !== sbh) { svCanvas.width = sbw; svCanvas.height = sbh; }
-    svCanvas.style.width = sw + 'px';
-    svCanvas.style.height = sh + 'px';
+    // PC: CSS handles display size; mobile: set height for aspect-ratio
+    if (isMob) { svCanvas.style.height = sh + 'px'; }
     const svCtx = svCanvas.getContext('2d');
     svCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     svCtx.imageSmoothingEnabled = true;

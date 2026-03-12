@@ -1326,7 +1326,11 @@ function applyEffectiveAttendance(users = [], events = [], attendanceNameToUserI
   const todayKey = kstDateKey(new Date().toISOString());
   const byUser = new Map();
 
-  for (const e of events || []) {
+  // cancelled 처리가 시간순(오름차순)에 의존하므로 정렬 보장
+  // (getLogs는 DESC로 반환하지만, 이 함수는 ASC 순서를 가정)
+  const sortedEvents = [...(events || [])].sort((a, b) => new Date(a.at || 0).getTime() - new Date(b.at || 0).getTime());
+
+  for (const e of sortedEvents) {
     if (e.kind !== 'attendance') continue;
     const directUserId = String(e.userId || '');
     const mappedUserId = attendanceNameToUserId?.[e.attendanceName || ''] || null;
