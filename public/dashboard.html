@@ -229,6 +229,39 @@
         font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;
         display: flex; justify-content: space-between; font-weight: 500;
       }
+      .char-preview { display:flex; align-items:center; gap:8px; }
+      .char-preview-img {
+        width: 36px; height: 36px; image-rendering: pixelated;
+        border: 1px solid var(--line-subtle); border-radius: 6px;
+        background: #0e1420;
+      }
+      .char-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+      .char-card {
+        border: 1px solid var(--line-subtle);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 10px;
+      }
+      .char-card-head {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+        display:flex;
+        justify-content: space-between;
+      }
+      .char-card img {
+        width: 100%;
+        height: 92px;
+        object-fit: contain;
+        image-rendering: pixelated;
+        border: 1px solid var(--line-subtle);
+        border-radius: 6px;
+        background: #0e1420;
+      }
 
       /* ── Scrollbar ─────────────────────────────── */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -348,10 +381,12 @@
           <button id="applyCharacterBtn" class="btn">캐릭터 Apply</button>
           <span class="muted" id="characterApplyResult"></span>
         </div>
+        <div class="muted" style="margin:4px 0 10px;">캐릭터 번호와 <code>idle_down_f1.png</code>를 미리 보고 선택할 수 있어요.</div>
+        <div id="characterSheetPreview" class="char-grid" style="margin-bottom:10px;"></div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>사용자</th><th>현재 캐릭터</th><th>선택</th></tr>
+              <tr><th>사용자</th><th>현재 캐릭터</th><th>선택</th><th>선택 미리보기</th></tr>
             </thead>
             <tbody id="characterBody"></tbody>
           </table>
@@ -468,6 +503,7 @@
       const mapBody = document.getElementById('mapBody');
       const applyCharacterBtn = document.getElementById('applyCharacterBtn');
       const characterApplyResult = document.getElementById('characterApplyResult');
+      const characterSheetPreview = document.getElementById('characterSheetPreview');
       const characterBody = document.getElementById('characterBody');
       const hideBotsToggle = document.getElementById('hideBotsToggle');
       const collisionCanvas = document.getElementById('collisionCanvas');
@@ -527,6 +563,26 @@
         const opts = CHARACTER_SHEETS.map((name) => '<option value="' + name + '" ' + (String(name)===String(selected)?'selected':'') + '>' + name + '</option>');
         return [first, ...opts].join('');
       }
+      function characterNumber(sheet = '') {
+        const m = String(sheet).match(/_(\d{2})$/);
+        return m ? Number(m[1]) : null;
+      }
+      function characterPreviewHtml(sheet = '') {
+        if (!sheet) return '<span class="muted">-</span>';
+        const no = characterNumber(sheet);
+        const src = '/assets/characters/sliced_v5/' + encodeURIComponent(sheet) + '/idle_down_f1.png';
+        const noLabel = no == null ? '#' : ('#' + no);
+        return '<div class="char-preview"><img class="char-preview-img" src="' + src + '" alt="' + esc(sheet) + ' preview" loading="lazy" /><span class="muted">' + noLabel + ' · idle_down_f1.png</span></div>';
+      }
+      function renderCharacterCatalog() {
+        if (!characterSheetPreview) return;
+        characterSheetPreview.innerHTML = CHARACTER_SHEETS.map((sheet) => {
+          const no = characterNumber(sheet);
+          const src = '/assets/characters/sliced_v5/' + encodeURIComponent(sheet) + '/idle_down_f1.png';
+          const noLabel = no == null ? '#' : ('캐릭터 #' + no);
+          return '<div class="char-card"><div class="char-card-head"><strong>' + noLabel + '</strong><span>' + esc(sheet) + '</span></div><img src="' + src + '" alt="' + esc(sheet) + ' idle_down_f1" loading="lazy" /></div>';
+        }).join('');
+      }
 
       function resolveMappingStatus(attendanceName = '', userId = '') {
         const byName = statusCache?.todayAttendanceByName || {};
@@ -562,7 +618,7 @@
         const sorted = [...users].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '', 'ko'));
         characterBody.innerHTML = sorted.map((u) => {
           const selected = selections[u.userId] || u.characterSheet || '';
-          return '<tr><td>' + esc(u.displayName || u.userId) + ' <span class="muted">(' + u.userId + ')</span></td><td>' + esc(selected || '-') + '</td><td><select class="input" data-char-user="' + u.userId + '">' + characterSelectOptions(selected) + '</select></td></tr>';
+          return '<tr><td>' + esc(u.displayName || u.userId) + ' <span class="muted">(' + u.userId + ')</span></td><td>' + esc(selected || '-') + '</td><td><select class="input" data-char-user="' + u.userId + '">' + characterSelectOptions(selected) + '</select></td><td data-char-preview>' + characterPreviewHtml(selected) + '</td></tr>';
         }).join('');
       }
 
@@ -1024,6 +1080,14 @@
 
       applyBtn.addEventListener('click', applyMappings);
       applyCharacterBtn.addEventListener('click', applyCharacterMappings);
+      characterBody?.addEventListener('change', (evt) => {
+        const select = evt.target?.closest?.('select[data-char-user]');
+        if (!select) return;
+        const row = select.closest('tr');
+        const previewCell = row?.querySelector('[data-char-preview]');
+        if (!previewCell) return;
+        previewCell.innerHTML = characterPreviewHtml(select.value || '');
+      });
       refreshNameBtn.addEventListener('click', refreshAttendanceCandidates);
       refreshTodayAttendanceBtn?.addEventListener('click', refreshTodayAttendance);
       document.getElementById('reloadScheduledBtn')?.addEventListener('click', async () => {
@@ -1132,6 +1196,7 @@
 
       document.querySelector('[data-tab="collision"]')?.addEventListener('click', loadCollisionEditor);
 
+      renderCharacterCatalog();
       refresh();
       // 탭이 보일 때만 폴링 — 숨김 시 불필요한 서버 요청 차단
       setInterval(() => { if (!document.hidden) refresh(); }, 5000);
