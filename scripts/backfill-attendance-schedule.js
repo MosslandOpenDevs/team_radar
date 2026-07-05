@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { Pool } = require('pg');
+const { extractScheduleInfo } = require('../src/shared/attendance-parse');
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -9,29 +10,6 @@ if (!DATABASE_URL) {
 
 const DAYS = Math.max(1, Math.min(90, Number(process.argv[2] || 30)));
 const pool = new Pool({ connectionString: DATABASE_URL });
-
-function compact(text) {
-  return String(text || '').replace(/\s+/g, ' ').trim();
-}
-
-function extractScheduleInfo(text) {
-  const t = compact(text || '');
-  if (!t) return { scheduledFor: null, durationText: null };
-
-  const dateMatch = t.match(/Scheduled\s*for\s*([^\n]+?)(?:\s+Duration\b|$)/i);
-  const durationMatch = t.match(/Duration\s*([^\n]+)$/i);
-
-  const dateRaw = compact(dateMatch?.[1] || '');
-  const durationText = compact(durationMatch?.[1] || '') || null;
-
-  let scheduledFor = null;
-  if (dateRaw) {
-    const parsed = new Date(dateRaw);
-    if (!Number.isNaN(parsed.getTime())) scheduledFor = parsed.toISOString();
-  }
-
-  return { scheduledFor, durationText };
-}
 
 async function main() {
   const client = await pool.connect();

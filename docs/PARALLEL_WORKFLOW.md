@@ -13,7 +13,7 @@
 - 채널 권장: `#dashboard-dev`
 
 ## 3) Map Frontend Track
-- 경로: `map-frontend/`, `/workspace/map/composed_set_map.html`
+- 경로: `map-frontend/`, `map/composed_set_map.html`
 - 책임: 캐릭터 배치/렌더링/시각화
 - 채널 권장: `#map-frontend-dev`
 

@@ -124,6 +124,10 @@ async function upsertAttendanceByName(name, row) {
   );
 }
 
+async function deleteAttendanceByName(name) {
+  await q(`delete from attendance_by_name_current where attendance_name = $1`, [name]);
+}
+
 async function getDashboardStatus() {
   const usersRes = await q(
     `select u.user_id,
@@ -291,6 +295,7 @@ module.exports = {
   insertEvent,
   insertWorkLog,
   upsertAttendanceByName,
+  deleteAttendanceByName,
   getDashboardStatus,
   getLogs,
   applyAttendanceMappings,

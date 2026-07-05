@@ -9,7 +9,7 @@
 ## 1) 설치
 
 ```bash
-cd /home/teny/.openclaw/workspace/teamradar-map
+cd team_radar
 npm install
 ```
 

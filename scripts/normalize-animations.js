@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = '/home/teny/.openclaw/workspace/teamradar-map/public/assets/characters/sliced';
+// Repo-relative source of sliced character frames (was a hardcoded foreign path).
+const ROOT = path.resolve(__dirname, '..', 'public', 'assets', 'characters', 'sliced_v5');
 const OUT = path.join(ROOT, 'normalized');
 const dirs = ['right', 'up', 'left', 'down'];
 const states = ['idle', 'walk'];

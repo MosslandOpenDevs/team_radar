@@ -5,6 +5,14 @@ const { LowSync } = require('lowdb');
 const { ROOT_DIR, DATA_DIR, DB_FILE } = require('../../core/paths');
 const pgStore = require('../../core/pg-store');
 const {
+  compact,
+  parseAttendanceState,
+  parseWorkState,
+  getAttendanceSourceText,
+  extractAttendanceName,
+  extractScheduleInfo,
+} = require('../../shared/attendance-parse');
+const {
   Client,
   GatewayIntentBits,
   Partials,
@@ -21,6 +29,9 @@ const ATTENDANCE_BACKFILL_DAYS_KST = Math.max(1, Number(process.env.ATTENDANCE_B
 const STARTUP_WORK_BACKFILL = String(process.env.STARTUP_WORK_BACKFILL || 'true').toLowerCase() !== 'false';
 const WORK_BACKFILL_DAYS = Math.max(1, Number(process.env.WORK_BACKFILL_DAYS || 7));
 const DASHBOARD_API_BASE = String(process.env.DASHBOARD_API_BASE || `http://localhost:${Number(process.env.DASHBOARD_PORT || 3100)}`).replace(/\/$/, '');
+// When the dashboard has APP_ACCESS_TOKEN auth enabled, the collector must
+// present the same token to reach the internal resync endpoint.
+const APP_ACCESS_TOKEN = String(process.env.APP_ACCESS_TOKEN || '').trim();
 const ATTENDANCE_PERIODIC_RESYNC_ENABLED = String(process.env.ATTENDANCE_PERIODIC_RESYNC_ENABLED || 'true').toLowerCase() !== 'false';
 const ATTENDANCE_PERIODIC_RESYNC_MINUTES = Math.max(5, Number(process.env.ATTENDANCE_PERIODIC_RESYNC_MINUTES || 60));
 const ATTENDANCE_PERIODIC_RESYNC_DAYS = Math.max(1, Math.min(30, Number(process.env.ATTENDANCE_PERIODIC_RESYNC_DAYS || 1)));
@@ -174,7 +185,10 @@ client.on(Events.MessageCreate, async (message) => {
         appendEvent(eventRow);
         delete db.data.attendanceByName[attendanceName];
         if (pgStore.pgEnabled) {
-          try { await pgStore.insertEvent(eventRow); } catch (err) { console.warn('[CANCEL]', err.message); }
+          try {
+            await pgStore.insertEvent(eventRow);
+            await pgStore.deleteAttendanceByName(attendanceName);
+          } catch (err) { console.warn('[CANCEL]', err.message); }
         }
         touchMeta(nowIso);
         db.write();
@@ -233,7 +247,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
   }
 
-  if (workSet.has(message.channelId)) {
+  if (!isAttendanceChannel && workSet.has(message.channelId)) {
     const state = parseWorkState(message.content);
     const summary = compact(message.content);
     const summaryShort = await summarizeWorkText(summary);
@@ -307,7 +321,10 @@ function setupPeriodicAttendanceResync() {
     try {
       const res = await fetch(`${DASHBOARD_API_BASE}/api/attendance/reload-scheduled`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(APP_ACCESS_TOKEN ? { 'x-access-token': APP_ACCESS_TOKEN } : {}),
+        },
         body: JSON.stringify({ days: ATTENDANCE_PERIODIC_RESYNC_DAYS }),
       });
       const text = await res.text();
@@ -465,14 +482,17 @@ async function startupBackfillAttendance(client, startUtc, endUtc) {
         // ChronicleBot cancelled
         if (isChronicleBot && state === 'cancelled') {
           const attendanceName = extractAttendanceName(rawText);
-          if (attendanceName && !db.data.events.some((e) => e.messageId === msg.id)) {
-            db.data.events.push({
-              userId, displayName, kind: 'attendance', state: 'cancelled',
-              attendanceName, summary: rawText,
-              scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText,
-              channelId: msg.channelId, messageId: msg.id, at: msg.createdAt.toISOString(),
-            });
-            imported += 1;
+          if (attendanceName) {
+            delete db.data.attendanceByName[attendanceName];
+            if (!db.data.events.some((e) => e.messageId === msg.id)) {
+              db.data.events.push({
+                userId, displayName, kind: 'attendance', state: 'cancelled',
+                attendanceName, summary: rawText,
+                scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText,
+                channelId: msg.channelId, messageId: msg.id, at: msg.createdAt.toISOString(),
+              });
+              imported += 1;
+            }
           }
           continue;
         }
@@ -859,121 +879,6 @@ async function mirrorPostgres(user, eventRow, attendanceByNameRow = null) {
 function touchMeta(nowIso) {
   db.data.meta ||= { createdAt: nowIso, updatedAt: nowIso };
   db.data.meta.updatedAt = nowIso;
-}
-
-function parseAttendanceState(text) {
-  const src = String(text || '');
-  const t = src.toLowerCase();
-
-  if (/cancelled|취소됨/.test(t)) return 'cancelled';
-
-  // 우선순위: 문장형 고정 패턴 (예: "... 출근했습니다.", "... 퇴근했습니다.")
-  if (/출근\s*했습니다\.?/.test(src)) return '출근';
-  if (/퇴근\s*했습니다\.?/.test(src)) return '퇴근';
-
-  if (/퇴근|off|leave work/.test(t)) return '퇴근';
-  if (/출근|on\s?duty|check\s?in/.test(t)) return '출근';
-  if (/지각|late/.test(t)) return '지각';
-  if (/재택근무|재택|remote|wfh|work from home/.test(t)) return '재택근무';
-  if (/오전\s*반차|am\s*half/.test(t)) return '오전반차';
-  if (/오후\s*반차|pm\s*half/.test(t)) return '오후반차';
-  if (/반차/.test(t)) return '반차';
-  if (/휴가|연차|pto|vacation/.test(t)) return '휴가';
-  if (/외근|자리비움|away|afk/.test(t)) return '자리비움';
-  if (/복귀|back/.test(t)) return '복귀';
-  return '업데이트';
-}
-
-function getAttendanceSourceText(message) {
-  const chunks = [];
-  if (message?.content) chunks.push(message.content);
-
-  for (const e of message?.embeds || []) {
-    if (e.title) chunks.push(e.title);
-    if (e.description) chunks.push(e.description);
-    for (const f of e.fields || []) {
-      if (f?.name) chunks.push(f.name);
-      if (f?.value) chunks.push(f.value);
-    }
-  }
-
-  const merged = compact(chunks.join(' '));
-  return merged || '(첨부/임베드 메시지)';
-}
-
-function extractAttendanceName(text) {
-  const t = compact(text || '');
-  if (!t) return null;
-
-  // 임베드/마크다운 기호 제거 (굵게, 백틱, 괄호 등)
-  const cleaned = t.replace(/[*_`~\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  // 예: "3월 4일(수) 이상민 ... 출근했습니다." / "... 퇴근했습니다."
-  const dated = cleaned.match(/^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12})/);
-  if (dated?.[1]) return dated[1];
-
-  // 예: "박정우 재택근무", "홍길동 연차", "김철수 반차"
-  const leaveLike = cleaned.match(/^([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/);
-  if (leaveLike?.[1]) return leaveLike[1];
-
-  // 문장 중간에서도 이름 + 상태를 찾을 수 있게 보완
-  const leaveLikeAnywhere = cleaned.match(/([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/);
-  if (leaveLikeAnywhere?.[1]) return leaveLikeAnywhere[1];
-
-  // 일반 포맷 보조
-  const basic = cleaned.match(/^([가-힣A-Za-z]{2,12})\s+(?:근무|출근|퇴근|휴가|지각|외근|복귀)/);
-  if (basic?.[1]) return basic[1];
-
-  return null;
-}
-
-function extractScheduleInfo(text) {
-  const t = compact(text || '');
-  if (!t) return { scheduledFor: null, durationText: null };
-
-  const dateMatch = t.match(/Scheduled\s*for\s*([^\n]+?)(?:\s+Duration\b|$)/i);
-  const durationMatch = t.match(/Duration\s*([^\n]+)$/i);
-
-  const dateRaw = compact(dateMatch?.[1] || '');
-  const durationText = compact(durationMatch?.[1] || '') || null;
-
-  let scheduledFor = null;
-  if (dateRaw) {
-    // Discord 유닉스 타임스탬프 포맷: <t:1773187200:F>
-    const discordTs = dateRaw.match(/<t:(\d+)(?::[^>]*)?>/) || t.match(/<t:(\d+)(?::[^>]*)?>/);
-    if (discordTs) {
-      scheduledFor = new Date(Number(discordTs[1]) * 1000).toISOString();
-    } else {
-      // 영어 날짜 시도 (e.g. "Tuesday, March 10, 2026")
-      const parsed = new Date(dateRaw);
-      if (!Number.isNaN(parsed.getTime())) {
-        scheduledFor = parsed.toISOString();
-      } else {
-        // 한국어 날짜 파싱 (e.g. "2026년 3월 10일 화요일 오전 9:00")
-        const korMatch = dateRaw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
-        if (korMatch) {
-          const [, y, m, d] = korMatch;
-          scheduledFor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).toISOString();
-        }
-      }
-    }
-  }
-
-  return { scheduledFor, durationText };
-}
-
-function parseWorkState(text) {
-  const t = (text || '').toLowerCase();
-  if (/완료|done|finished|resolved/.test(t)) return '완료';
-  if (/진행|in\s?progress|working/.test(t)) return '진행중';
-  if (/대기|보류|pending|hold/.test(t)) return '대기';
-  if (/막힘|이슈|blocked|issue/.test(t)) return '이슈';
-  if (/리뷰|review/.test(t)) return '리뷰중';
-  return '업데이트';
-}
-
-function compact(text) {
-  return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
 function trim(text, n) {

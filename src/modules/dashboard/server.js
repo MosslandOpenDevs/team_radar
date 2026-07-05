@@ -14,8 +14,17 @@ const {
   DEFAULT_STATUS_ROOM_MAPPING,
   normalizeStatusRoomMapping,
 } = require('../../shared/status-zones');
+const {
+  parseAttendanceState,
+  extractAttendanceName,
+  extractScheduleInfo,
+  getMessageText,
+} = require('../../shared/attendance-parse');
 
 const PORT = Number(process.env.DASHBOARD_PORT || 3100);
+// Interface to bind. Defaults to 0.0.0.0 (all interfaces) to preserve existing
+// LAN/tailscale access; set DASHBOARD_HOST=127.0.0.1 for loopback-only.
+const DASHBOARD_HOST = String(process.env.DASHBOARD_HOST || '0.0.0.0').trim();
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID;
 const parseIds = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -142,6 +151,11 @@ app.post('/auth/logout', (req, res) => {
 app.use((req, res, next) => {
   if (!AUTH_ENABLED) return next();
   if (req.path === '/login' || req.path === '/auth/login' || req.path === '/healthz' || req.path === '/favicon.ico') return next();
+
+  // Server-to-server access (e.g. the collector's periodic resync) may present
+  // the shared token directly instead of a browser session cookie.
+  const headerToken = req.headers['x-access-token'];
+  if (headerToken && constantTimeEqual(String(headerToken), APP_ACCESS_TOKEN)) return next();
 
   const sid = parseCookies(req)[SESSION_COOKIE_NAME];
   const session = sid ? SESSION_STORE.get(sid) : null;
@@ -591,6 +605,7 @@ app.post('/api/attendance/reload-today', async (req, res) => {
               const attendanceName = extractAttendanceName(rawText);
               if (attendanceName) {
                 await pgStore.insertEvent({ userId: String(msg.author?.id || ''), displayName: msg.member?.displayName || msg.author?.username || attendanceName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                await pgStore.deleteAttendanceByName(attendanceName);
                 imported += 1;
               }
               continue;
@@ -682,12 +697,15 @@ app.post('/api/attendance/reload-today', async (req, res) => {
           // ChronicleBot cancelled
           if (isChronicleBot && state === 'cancelled') {
             const attendanceName = extractAttendanceName(rawText);
-            if (attendanceName && !seenMessageIds.has(String(msg.id))) {
-              const userId = String(msg.author?.id || '');
-              const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
-              db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
-              seenMessageIds.add(String(msg.id));
-              imported += 1;
+            if (attendanceName) {
+              delete db.attendanceByName[attendanceName];
+              if (!seenMessageIds.has(String(msg.id))) {
+                const userId = String(msg.author?.id || '');
+                const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
+                db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                seenMessageIds.add(String(msg.id));
+                imported += 1;
+              }
             }
             continue;
           }
@@ -783,6 +801,7 @@ app.post('/api/attendance/reload-scheduled', async (req, res) => {
               const attendanceName = extractAttendanceName(rawText);
               if (attendanceName) {
                 await pgStore.insertEvent({ userId: String(msg.author?.id || ''), displayName: msg.member?.displayName || msg.author?.username || attendanceName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                await pgStore.deleteAttendanceByName(attendanceName);
                 imported += 1;
               }
               continue;
@@ -849,12 +868,15 @@ app.post('/api/attendance/reload-scheduled', async (req, res) => {
           // ChronicleBot cancelled
           if (isChronicleBot && state === 'cancelled') {
             const attendanceName = extractAttendanceName(rawText);
-            if (attendanceName && !seenMessageIds.has(String(msg.id))) {
-              const userId = String(msg.author?.id || '');
-              const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
-              db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
-              seenMessageIds.add(String(msg.id));
-              imported += 1;
+            if (attendanceName) {
+              delete db.attendanceByName[attendanceName];
+              if (!seenMessageIds.has(String(msg.id))) {
+                const userId = String(msg.author?.id || '');
+                const displayName = msg.member?.displayName || msg.author?.username || attendanceName;
+                db.events.push({ userId, displayName, kind: 'attendance', state: 'cancelled', attendanceName, summary: rawText, scheduledFor: scheduleInfo.scheduledFor, durationText: scheduleInfo.durationText, channelId, messageId: msg.id, at: msg.createdAt.toISOString() });
+                seenMessageIds.add(String(msg.id));
+                imported += 1;
+              }
             }
             continue;
           }
@@ -1477,98 +1499,13 @@ function getTodayKstAttendanceByName(db) {
   return out;
 }
 
-function parseAttendanceState(text) {
-  const t = String(text || '').trim();
-  if (!t) return '업데이트';
-  if (/cancelled|취소됨/i.test(t)) return 'cancelled';
-  if (/출근/.test(t)) return '출근';
-  if (/퇴근/.test(t)) return '퇴근';
-  if (/지각/.test(t)) return '지각';
-  if (/복귀/.test(t)) return '복귀';
-  if (/재택/.test(t)) return '재택근무';
-  if (/오전\s*반차|am\s*half/.test(t)) return '오전반차';
-  if (/오후\s*반차|pm\s*half/.test(t)) return '오후반차';
-  if (/반차/.test(t)) return '반차';
-  if (/연차|휴가/.test(t)) return '휴가';
-  if (/외근|자리비움/.test(t)) return '자리비움';
-  return '업데이트';
-}
-
-function extractScheduleInfo(text) {
-  const t = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!t) return { scheduledFor: null, durationText: null };
-
-  const dateMatch = t.match(/Scheduled\s*for\s*([^\n]+?)(?:\s+Duration\b|$)/i);
-  const durationMatch = t.match(/Duration\s*([^\n]+)$/i);
-
-  const dateRaw = (dateMatch?.[1] || '').replace(/\s+/g, ' ').trim();
-  const durationText = (durationMatch?.[1] || '').replace(/\s+/g, ' ').trim() || null;
-
-  let scheduledFor = null;
-  if (dateRaw) {
-    // Discord 유닉스 타임스탬프 포맷: <t:1773187200:F>
-    const discordTs = dateRaw.match(/<t:(\d+)(?::[^>]*)?>/) || t.match(/<t:(\d+)(?::[^>]*)?>/);
-    if (discordTs) {
-      scheduledFor = new Date(Number(discordTs[1]) * 1000).toISOString();
-    } else {
-      // 영어 날짜 시도 (e.g. "Tuesday, March 10, 2026")
-      const parsed = new Date(dateRaw);
-      if (!Number.isNaN(parsed.getTime())) {
-        scheduledFor = parsed.toISOString();
-      } else {
-        // 한국어 날짜 파싱 (e.g. "2026년 3월 10일 화요일 오전 9:00")
-        const korMatch = dateRaw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
-        if (korMatch) {
-          const [, y, m, d] = korMatch;
-          scheduledFor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))).toISOString();
-        }
-      }
-    }
-  }
-
-  return { scheduledFor, durationText };
-}
-
-function getMessageText(msg) {
-  const chunks = [];
-  if (msg?.content) chunks.push(msg.content);
-  for (const e of msg?.embeds || []) {
-    if (e.title) chunks.push(e.title);
-    if (e.description) chunks.push(e.description);
-    for (const f of e.fields || []) {
-      if (f?.name) chunks.push(f.name);
-      if (f?.value) chunks.push(f.value);
-    }
-  }
-  return chunks.join(' ');
-}
-
-function extractAttendanceName(text) {
-  const t = String(text || '').trim();
-  if (!t) return null;
-
-  const cleaned = t.replace(/[*_`~\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-
-  const patterns = [
-    /^\d{1,2}월\s*\d{1,2}일(?:\([^)]*\))?\s+([가-힣A-Za-z]{2,12}).*(?:출근|퇴근)\s*했습니다\.?/,
-    /^([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/,
-    /([가-힣A-Za-z]{2,12})\s+(?:재택근무|연차|반차|휴가)\b/,
-    /^\[\s*([^\]]{2,20})\s*\]/,
-    /^([가-힣A-Za-z][가-힣A-Za-z0-9._ -]{1,19})\s*[:：\-]\s*(출근|퇴근|휴가|지각|외근|복귀|반차|연차|재택근무)/,
-    /(?:이름|성명)\s*[:：]\s*([가-힣A-Za-z][가-힣A-Za-z0-9._ -]{1,19})/,
-    /^([가-힣]{2,4})\s+(?:출근|퇴근|휴가|지각|외근|복귀|반차|연차|재택근무)/,
-    /([가-힣A-Za-z]{2,12})\s*(?:님)?\s*(?:출근|퇴근|휴가|지각|외근|복귀|반차|연차|재택근무)/,
-  ];
-
-  for (const p of patterns) {
-    const m = cleaned.match(p);
-    if (m?.[1]) return m[1].trim();
-  }
-  return null;
-}
-
-app.listen(PORT, async () => {
+app.listen(PORT, DASHBOARD_HOST, async () => {
+  console.log(`[DASHBOARD] listening on ${DASHBOARD_HOST}:${PORT}`);
   console.log(`[DASHBOARD] http://localhost:${PORT}/dashboard`);
   console.log(`[DASHBOARD] API status: http://localhost:${PORT}/api/team/status`);
+  const loopbackOnly = DASHBOARD_HOST === '127.0.0.1' || DASHBOARD_HOST === 'localhost' || DASHBOARD_HOST === '::1';
+  if (!AUTH_ENABLED && !loopbackOnly) {
+    console.warn(`[SECURITY] Bound to ${DASHBOARD_HOST} with no APP_ACCESS_TOKEN — anyone who can reach this port has full read/write access (attendance data, member roster, map/collision writes). Set APP_ACCESS_TOKEN, or DASHBOARD_HOST=127.0.0.1 for loopback-only.`);
+  }
   await initDiscordMemberCache();
 });

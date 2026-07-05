@@ -38,7 +38,6 @@ async function summarize(raw) {
       userId: r.userId, displayName: r.displayName, kind:'work', state:r.state,
       summary:r.summary, summaryShort,
       channelId:r.channelId, messageId:r.messageId, at:r.at,
-      raw_payload: { summaryShort },
     });
     updated++;
   }

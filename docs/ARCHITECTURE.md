@@ -12,6 +12,13 @@ Bootstrap files at repo root are intentionally kept for backward compatibility w
 - `src/core/`
   - `paths.js`: project path constants
   - `pg-store.js`: PostgreSQL adapter/store
+- `src/shared/`
+  - `attendance-parse.js`: single source of truth for attendance/work message
+    parsing (`parseAttendanceState`, `parseWorkState`, `extractAttendanceName`,
+    `extractScheduleInfo`, `getMessageText`). Imported by both the collector
+    (live ingestion) and the dashboard (reload/backfill) so the same Discord
+    message is always classified identically regardless of ingestion path.
+  - `status-zones.js`: status → map-zone mapping + normalization
 - `src/modules/monitor/`
   - Discord ingestion, parsing, event append, status update
 - `src/modules/dashboard/`
@@ -30,7 +37,8 @@ If `DATABASE_URL` is present and `DB_MODE` is not specified, mode defaults to `d
 - `public/dashboard.html`: dashboard UI
 - Map UI는 별도 경로(`map/composed_set_map.html`)에서 운영
 - `public/assets/`: sprites, map assets
-- `public/reports/`: shareable HTML reports
+- `public/reports/`: runtime HTML reports (**gitignored**)
+- `reports/` (repo root): committed progress-report HTML (large; see README > Reports)
 - `public/lab/`: playground/check tools
 - `public/portable/`: portable snippets/assets
 

@@ -1,16 +1,15 @@
 require('dotenv').config();
 const fs = require('fs');
-const path = require('path');
 const { JSONFileSync } = require('lowdb/node');
 const { LowSync } = require('lowdb');
 const { Client, GatewayIntentBits } = require('discord.js');
+const { DATA_DIR, DB_FILE } = require('../src/core/paths');
+const { parseWorkState, compact } = require('../src/shared/attendance-parse');
 
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const WORK_CHANNEL_IDS = parseIds(process.env.WORK_CHANNEL_IDS);
 const MAX_WORK_LOGS_PER_USER = Number(process.env.MAX_WORK_LOGS_PER_USER || 20);
 const BACKFILL_DAYS = Number(process.env.BACKFILL_DAYS || 3);
-const DATA_DIR = path.join(__dirname, 'data');
-const DB_FILE = path.join(DATA_DIR, 'team-status-db.json');
 
 if (!BOT_TOKEN) {
   console.error('[ERROR] DISCORD_BOT_TOKEN is required');
@@ -158,20 +157,6 @@ function getOrCreateUser(userId, displayName) {
     db.data.users.push(row);
   }
   return row;
-}
-
-function parseWorkState(text) {
-  const t = (text || '').toLowerCase();
-  if (/완료|done|finished|resolved/.test(t)) return '완료';
-  if (/진행|in\s?progress|working/.test(t)) return '진행중';
-  if (/대기|보류|pending|hold/.test(t)) return '대기';
-  if (/막힘|이슈|blocked|issue/.test(t)) return '이슈';
-  if (/리뷰|review/.test(t)) return '리뷰중';
-  return '업데이트';
-}
-
-function compact(text) {
-  return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
 function dedupeByMessageId(rows) {
