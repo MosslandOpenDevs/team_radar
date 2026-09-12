@@ -1,5 +1,9 @@
 # TeamRadar Map
 
+<!-- opendevs-badges:start -->
+[![Repository: MosslandOpenDevs](https://img.shields.io/badge/Repository-MosslandOpenDevs-64748b?style=flat)](https://github.com/MosslandOpenDevs/team_radar)
+<!-- opendevs-badges:end -->
+
 Discord의 **근태 채널 / 업무공유 채널** 데이터를 수집해서,
 대시보드와 맵 형태로 팀 상태를 시각화합니다.
 
